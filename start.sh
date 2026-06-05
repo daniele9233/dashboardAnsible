@@ -8,12 +8,16 @@ cd "$(dirname "$(realpath "$0")")"
 # python3-flask; in fallback si usa pip con --break-system-packages.
 if ! python3 -c "import flask" 2>/dev/null; then
   echo "  Flask non trovato — installazione in corso…"
+  SUDO=""
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then SUDO="sudo"; fi
   if command -v apt-get >/dev/null 2>&1; then
-    apt-get install -y python3-flask 2>/dev/null \
+    $SUDO apt-get install -y python3-flask 2>/dev/null \
       || pip install flask --break-system-packages --quiet 2>/dev/null \
+      || pip install flask --user --quiet 2>/dev/null \
       || pip install flask --quiet
   else
     pip install flask --break-system-packages --quiet 2>/dev/null \
+      || pip install flask --user --quiet 2>/dev/null \
       || pip install flask --quiet
   fi
 fi
