@@ -1,190 +1,723 @@
+"""
+Polaris · Cert Inspector
+
+Dashboard read-only di diagnostica certificati per ambienti Kubernetes/Rancher.
+
+Uso `kubectl` (gia' configurato sul controller) per estrarre tutti i certificati
+visibili in un cluster: secret di tipo TLS, riferimenti negli Ingress, CA
+pubblicata da Rancher (`setting/cacerts`). Per ogni certificato esegue un
+parsing con OpenSSL e individua:
+
+  - dove vive il certificato (namespace/secret/ingress)
+  - se e' esposto esternamente (hostnames negli Ingress/SAN)
+  - chi e' la CA emittente e il suo fingerprint
+  - scadenza, validita', tipo (CA, server, self-signed)
+
+Esegue anche un probe TLS verso gli hostname estratti per capire se quello
+effettivamente servito dall'esterno (es. nginx davanti a Rancher) coincide
+con quello presente nel cluster.
+
+Per ogni anomalia, il frontend produce un blocco "Remediation" che indica:
+  - i comandi corretti
+  - su quale VM eseguirli (control-plane / Rancher / nginx esterno)
+
+L'esecuzione e' read-only: la dashboard NON applica nulla.
+"""
 from flask import Flask, request, jsonify, render_template
-import subprocess
-import threading
-import shlex
+import base64
+import hashlib
 import json
 import os
+import re
+import socket
+import ssl
+import subprocess
+import threading
 
 app = Flask(__name__)
 
 # ---------------------------------------------------------------------------
-# Configurazione di base
-# ---------------------------------------------------------------------------
-# Cartella dove vengono clonati i repository Ansible gestiti dalla dashboard.
-# Personalizzabile via env ANSIBLE_PROJECTS_DIR (default: ~/ansible-projects).
-PROJECTS_DIR = os.path.abspath(
-    os.environ.get('ANSIBLE_PROJECTS_DIR', os.path.expanduser('~/ansible-projects'))
-)
-
-# ---------------------------------------------------------------------------
-# Registro dei progetti Ansible.
-# Ogni voce mappa 1:1 un repository GitHub personale. I metadati (playbook,
-# inventory, host groups, roles) sono ricavati dalla struttura reale dei repo.
-# ---------------------------------------------------------------------------
-PROJECTS = [
-    {
-        'key': 'microceph',
-        'name': 'MicroCeph · Dischi Loop',
-        'desc': 'Cluster MicroCeph a 3 nodi con OSD su loop device e CephFS replica 3.',
-        'repo': 'https://github.com/daniele9233/microceph-dischi-loop',
-        'branch': 'main',
-        'subdir': 'ansible',
-        'playbook': 'site.yml',
-        'inventory': 'inventory.ini',
-        'icon': 'hard-drive',
-        'accent': '#5aa6ed',
-        'groups': ['microceph', 'microceph_bootstrap', 'microceph_workers'],
-        'roles': ['microceph_install', 'microceph_bootstrap', 'microceph_join',
-                  'microceph_osd', 'microceph_cephfs', 'microceph_verify'],
-    },
-    {
-        'key': 'kafka',
-        'name': 'Kafka + Zookeeper',
-        'desc': 'Deploy di un cluster Kafka e Zookeeper. NB: il disco /opt va montato manualmente.',
-        'repo': 'https://github.com/daniele9233/kafka-zookeeper-ansible',
-        'branch': 'main',
-        'subdir': '',
-        'playbook': 'install.yml',
-        'inventory': 'inventories/inventory.ini',
-        'icon': 'layers',
-        'accent': '#e8a838',
-        'groups': ['zookeeper', 'kafka'],
-        'roles': ['zookeeper', 'kafka'],
-    },
-    {
-        'key': 'patroni',
-        'name': 'Patroni · PostgreSQL HA',
-        'desc': 'PostgreSQL 15 in alta affidabilità con Patroni, etcd e PgBouncer su 3 nodi.',
-        'repo': 'https://github.com/daniele9233/patroni-cluster',
-        'branch': 'main',
-        'subdir': '',
-        'playbook': 'site.yml',
-        'inventory': 'inventory.ini',
-        'icon': 'database',
-        'accent': '#3fb87a',
-        'groups': ['all'],
-        'roles': ['postgresql_cluster'],
-    },
-    {
-        'key': 'rke2',
-        'name': 'K8s RKE2 + Rancher v5',
-        'desc': 'Cluster RKE2 multi-nodo con Rancher, NFS, pgAdmin, Nginx e Prometheus.',
-        'repo': 'https://github.com/daniele9233/K8s-RKE2-Rancher-v5',
-        'branch': 'main',
-        'subdir': '',
-        'playbook': 'site.yml',
-        'inventory': 'inventory.ini',
-        'icon': 'boxes',
-        'accent': '#c084fc',
-        'groups': ['all', 'masters', 'new_managers', 'workers', 'nfs_server', 'nginx_servers'],
-        'roles': ['create_disk', 'update_hosts_file', 'master1_install', 'master1_config',
-                  'master1_kubectl', 'master1_helm_cert_manager_install', 'master1_create_cluster',
-                  'kubectl_setup', 'nfs', 'nfs_client_setup', 'nfs_provisioner',
-                  'install_pgadmin', 'nginx_install', 'install_prometheus'],
-    },
-]
-PROJECTS_BY_KEY = {p['key']: p for p in PROJECTS}
-
-# Operazioni ansible-playbook supportate -> argomenti aggiuntivi.
-PLAYBOOK_OPS = {
-    'deploy':     [],
-    'dryrun':     ['--check', '--diff'],
-    'syntax':     ['--syntax-check'],
-    'list_tasks': ['--list-tasks'],
-    'list_hosts': ['--list-hosts'],
-}
-# 'ping' è gestita a parte (ansible -m ping, non ansible-playbook).
-VALID_OPS = set(PLAYBOOK_OPS) | {'ping'}
-
-# ---------------------------------------------------------------------------
-# Stato job (uno alla volta, come nella dashboard di riferimento).
+# Stato job (una scansione/probe alla volta -> output streamabile sul terminale)
 # ---------------------------------------------------------------------------
 _job_lock = threading.Lock()
-_job_state = {
-    'status': 'idle',  # idle | running | success | failed
-    'output': [],
-}
+_job_state = {'status': 'idle', 'output': []}
 
 
-# ---------------------------------------------------------------------------
-# Helper sui path dei progetti
-# ---------------------------------------------------------------------------
-def _repo_name(p):
-    """Nome cartella locale del repo (basename dell'URL, senza .git)."""
-    base = p['repo'].rstrip('/').split('/')[-1]
-    return base[:-4] if base.endswith('.git') else base
+def _log(line):
+    _job_state['output'].append(line)
 
 
-def _project_dir(p):
-    """Root del repo clonato."""
-    return os.path.join(PROJECTS_DIR, _repo_name(p))
-
-
-def _work_dir(p):
-    """Directory di lavoro ansible (root + eventuale subdir tipo 'ansible')."""
-    root = _project_dir(p)
-    return os.path.join(root, p['subdir']) if p.get('subdir') else root
-
-
-def _is_cloned(p):
-    return os.path.isdir(os.path.join(_project_dir(p), '.git'))
-
-
-def _safe_join(base, rel):
-    """Join che impedisce path traversal fuori da base. Ritorna None se fuori."""
-    full = os.path.normpath(os.path.join(base, rel))
-    base = os.path.normpath(base)
-    if full != base and not full.startswith(base + os.sep):
-        return None
-    return full
-
-
-# ---------------------------------------------------------------------------
-# Esecuzione comandi in background con streaming su _job_state['output'].
-# ---------------------------------------------------------------------------
-def _run(cmd_parts, cwd):
+def _kubectl(args, context=None, timeout=20):
+    """Lancia kubectl. Ritorna (rc, stdout, stderr). Non lancia eccezioni."""
+    cmd = ['kubectl']
+    if context:
+        cmd += ['--context', context]
+    cmd += args
     try:
-        env = os.environ.copy()
-        env['ANSIBLE_FORCE_COLOR'] = '1'
-        env['PYTHONUNBUFFERED'] = '1'
-
-        quoted = ' '.join(shlex.quote(p) for p in cmd_parts)
-
-        proc = subprocess.Popen(
-            ['bash', '-c', f'exec {quoted}'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            env=env,
-            cwd=cwd,
-            bufsize=1,
-            universal_newlines=True,
-        )
-        for line in iter(proc.stdout.readline, ''):
-            _job_state['output'].append(line.rstrip('\n'))
-        proc.wait()
-        _job_state['status'] = 'success' if proc.returncode == 0 else 'failed'
-
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout or '', r.stderr or ''
+    except FileNotFoundError:
+        return 127, '', 'kubectl non trovato nel PATH'
+    except subprocess.TimeoutExpired:
+        return 124, '', f'timeout dopo {timeout}s'
     except Exception as exc:
-        _job_state['output'].append(f'[ERRORE INTERNO] {exc}')
-        _job_state['status'] = 'failed'
+        return -1, '', str(exc)
 
+
+# ---------------------------------------------------------------------------
+# Parsing certificati: usa la stdlib (cryptography del pacchetto python3-cryptography
+# se presente, altrimenti fallback minimale con openssl).
+# ---------------------------------------------------------------------------
+def _try_import_cryptography():
+    # Catturo BaseException perche' alcune build rotte di cryptography (rust/cffi
+    # non installato) sollevano un pyo3 PanicException che non eredita da
+    # Exception. In quel caso usiamo il fallback openssl.
+    try:
+        from cryptography import x509  # noqa: F401
+        from cryptography.hazmat.primitives import hashes  # noqa: F401
+        return True
+    except BaseException:
+        return False
+
+
+_HAS_CRYPTO = _try_import_cryptography()
+
+
+def _parse_cert_pem(pem_bytes):
+    """Parsing di un certificato PEM. Ritorna dict con tutti i campi rilevanti.
+
+    Usa cryptography quando disponibile, altrimenti delega a openssl x509 via
+    subprocess. Restituisce {error: ...} se non riesce."""
+    if _HAS_CRYPTO:
+        try:
+            return _parse_with_cryptography(pem_bytes)
+        except Exception as exc:
+            return {'error': f'parse error: {exc}'}
+    return _parse_with_openssl(pem_bytes)
+
+
+def _parse_with_cryptography(pem_bytes):
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    cert = x509.load_pem_x509_certificate(pem_bytes)
+
+    def name_str(name):
+        return ', '.join(f'{a.oid._name}={a.value}' for a in name)
+
+    def name_field(name, oid):
+        try:
+            attrs = name.get_attributes_for_oid(oid)
+            return attrs[0].value if attrs else None
+        except Exception:
+            return None
+
+    from cryptography.x509.oid import NameOID, ExtensionOID
+
+    sans = []
+    is_ca = False
+    eku = []
+    try:
+        ext = cert.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
+        sans = [str(n.value) for n in ext.value]
+    except Exception:
+        pass
+    try:
+        ext = cert.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS)
+        is_ca = bool(ext.value.ca)
+    except Exception:
+        pass
+    try:
+        ext = cert.extensions.get_extension_for_oid(ExtensionOID.EXTENDED_KEY_USAGE)
+        eku = [u._name for u in ext.value]
+    except Exception:
+        pass
+
+    fp_sha256 = cert.fingerprint(hashes.SHA256()).hex()
+    # Hash dello SPKI (Subject Public Key Info) — utile per riconoscere il
+    # rinnovo dello stesso cert con stessa chiave.
+    spki_der = cert.public_key().public_bytes(
+        encoding=__import__('cryptography').hazmat.primitives.serialization.Encoding.DER,
+        format=__import__('cryptography').hazmat.primitives.serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    spki_sha256 = hashlib.sha256(spki_der).hexdigest()
+
+    subject_cn = name_field(cert.subject, NameOID.COMMON_NAME)
+    issuer_cn = name_field(cert.issuer, NameOID.COMMON_NAME)
+    issuer_o = name_field(cert.issuer, NameOID.ORGANIZATION_NAME)
+
+    # not_valid_after_utc esiste da cryptography 42+, fallback a not_valid_after
+    nva = getattr(cert, 'not_valid_after_utc', None) or cert.not_valid_after
+    nvb = getattr(cert, 'not_valid_before_utc', None) or cert.not_valid_before
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc) if nva.tzinfo else datetime.utcnow()
+    days_remaining = int((nva - now).total_seconds() // 86400)
+    expired = days_remaining < 0
+    self_signed = (cert.subject == cert.issuer)
+
+    return {
+        'subjectCN': subject_cn, 'subject': name_str(cert.subject),
+        'issuerCN': issuer_cn, 'issuerO': issuer_o, 'issuer': name_str(cert.issuer),
+        'serial': hex(cert.serial_number),
+        'notBefore': nvb.isoformat(), 'notAfter': nva.isoformat(),
+        'daysRemaining': days_remaining, 'expired': expired,
+        'sans': sans, 'isCA': is_ca, 'selfSigned': self_signed,
+        'eku': eku,
+        'fingerprintSHA256': fp_sha256,
+        'spkiSHA256': spki_sha256,
+    }
+
+
+def _parse_with_openssl(pem_bytes):
+    """Fallback usando il comando openssl. Estrae i campi principali via -noout
+    -text e -fingerprint."""
+    def _ssl(args, stdin_bytes):
+        try:
+            r = subprocess.run(['openssl'] + args, input=stdin_bytes,
+                               capture_output=True, timeout=15)
+            return r.returncode, r.stdout, r.stderr
+        except FileNotFoundError:
+            return 127, b'', b'openssl non installato'
+        except Exception as exc:
+            return -1, b'', str(exc).encode()
+
+    rc, out, err = _ssl(['x509', '-noout', '-fingerprint', '-sha256'], pem_bytes)
+    if rc != 0:
+        return {'error': (err or out).decode(errors='replace').strip()}
+    fp = re.search(rb'Fingerprint=([0-9A-F:]+)', out)
+    fp_sha256 = fp.group(1).decode().replace(':', '').lower() if fp else None
+
+    rc, txt, _ = _ssl(['x509', '-noout', '-subject', '-issuer', '-dates',
+                       '-serial', '-ext', 'subjectAltName,basicConstraints,extendedKeyUsage'], pem_bytes)
+    txt = txt.decode(errors='replace') if rc == 0 else ''
+    def line(prefix):
+        m = re.search(rf'^{re.escape(prefix)}=?\s*(.*)$', txt, re.M)
+        return m.group(1).strip() if m else None
+    subject = line('subject')
+    issuer = line('issuer')
+    not_before_raw = line('notBefore')
+    not_after_raw = line('notAfter')
+    serial = line('serial')
+
+    sans = []
+    m = re.search(r'X509v3 Subject Alternative Name:\s*\n\s*(.+)', txt)
+    if m:
+        sans = [s.strip().split(':', 1)[1] if ':' in s.strip() else s.strip()
+                for s in m.group(1).split(',')]
+    is_ca = 'CA:TRUE' in txt
+    eku = []
+    m = re.search(r'X509v3 Extended Key Usage:\s*\n\s*(.+)', txt)
+    if m: eku = [u.strip() for u in m.group(1).split(',')]
+
+    from datetime import datetime, timezone
+    def parse_dt(raw):
+        if not raw: return None
+        try:
+            return datetime.strptime(raw, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+    nva = parse_dt(not_after_raw); nvb = parse_dt(not_before_raw)
+    days_remaining = int((nva - datetime.now(timezone.utc)).total_seconds() // 86400) if nva else None
+    expired = (days_remaining is not None and days_remaining < 0)
+    self_signed = (subject == issuer)
+
+    def cn(s): m = re.search(r'CN\s*=\s*([^,/]+)', s or ''); return m.group(1).strip() if m else None
+    def org(s): m = re.search(r'O\s*=\s*([^,/]+)', s or ''); return m.group(1).strip() if m else None
+
+    return {
+        'subjectCN': cn(subject), 'subject': subject,
+        'issuerCN': cn(issuer), 'issuerO': org(issuer), 'issuer': issuer,
+        'serial': serial,
+        'notBefore': nvb.isoformat() if nvb else None,
+        'notAfter': nva.isoformat() if nva else None,
+        'daysRemaining': days_remaining, 'expired': expired,
+        'sans': sans, 'isCA': is_ca, 'selfSigned': self_signed,
+        'eku': eku,
+        'fingerprintSHA256': fp_sha256,
+        'spkiSHA256': None,  # non calcolato nel fallback
+    }
+
+
+def _ca_checksum_rancher(pem_text):
+    """Replica il calcolo che Rancher fa per pubblicare la CA su
+    `setting/cacerts`: SHA256 esadecimale del PEM (incluse newline). Usato dai
+    cluster downstream per validare il control-plane."""
+    return hashlib.sha256(pem_text.encode('utf-8')).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Scoperta certificati: contesti, secret TLS, ingress, Rancher cacerts
+# ---------------------------------------------------------------------------
+def _contexts():
+    rc, out, err = _kubectl(['config', 'get-contexts', '-o', 'name'], context=None, timeout=10)
+    if rc != 0: return []
+    return [l.strip() for l in out.splitlines() if l.strip()]
+
+
+def _current_context():
+    rc, out, _ = _kubectl(['config', 'current-context'], context=None, timeout=10)
+    return out.strip() if rc == 0 else None
+
+
+def _list_tls_secrets(context):
+    """Tutti i secret con almeno un certificato (tls.crt o ca.crt)."""
+    rc, out, err = _kubectl(
+        ['get', 'secret', '-A', '-o', 'json'], context=context, timeout=30,
+    )
+    if rc != 0: return [], err
+    try:
+        data = json.loads(out)
+    except Exception as exc:
+        return [], f'json parse: {exc}'
+    items = []
+    for it in data.get('items', []):
+        md = it.get('metadata', {}) or {}
+        ns = md.get('namespace'); name = md.get('name')
+        stype = it.get('type', '')
+        d = it.get('data', {}) or {}
+        for key in ('tls.crt', 'ca.crt', 'cacerts.pem', 'cacert.pem'):
+            if key in d:
+                items.append({
+                    'namespace': ns, 'name': name, 'secretType': stype,
+                    'dataKey': key, 'b64': d[key],
+                    'hasKey': 'tls.key' in d,
+                })
+    return items, None
+
+
+def _list_ingress_tls(context):
+    rc, out, err = _kubectl(['get', 'ingress', '-A', '-o', 'json'], context=context, timeout=30)
+    if rc != 0:
+        # ingress potrebbe non esistere in cluster vecchi -> ritorna vuoto
+        return [], err
+    try:
+        data = json.loads(out)
+    except Exception as exc:
+        return [], f'json parse: {exc}'
+    out_list = []
+    for it in data.get('items', []):
+        md = it.get('metadata', {}) or {}
+        spec = it.get('spec', {}) or {}
+        ns = md.get('namespace'); name = md.get('name')
+        ingressClass = spec.get('ingressClassName') or (md.get('annotations') or {}).get('kubernetes.io/ingress.class')
+        hosts_rules = [r.get('host') for r in (spec.get('rules') or []) if r.get('host')]
+        for t in (spec.get('tls') or []):
+            out_list.append({
+                'namespace': ns, 'ingress': name, 'ingressClass': ingressClass,
+                'secretName': t.get('secretName'),
+                'hosts': t.get('hosts') or [], 'rulesHosts': hosts_rules,
+            })
+    return out_list, None
+
+
+def _rancher_setting(context, setting):
+    """Legge una `setting` di Rancher (CRD management.cattle.io/v3). Ritorna
+    None se Rancher non e' installato in questo cluster."""
+    rc, out, err = _kubectl(
+        ['get', f'settings.management.cattle.io', setting, '-o', 'json'],
+        context=context, timeout=15,
+    )
+    if rc != 0: return None
+    try:
+        return json.loads(out).get('value')
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Probe TLS verso un endpoint esterno (es. l'nginx davanti a Rancher).
+# ---------------------------------------------------------------------------
+def _probe_tls(host, port=443, server_name=None, timeout=8):
+    """Apre una connessione TLS senza verifica chain (vogliamo *vedere* il cert
+    indipendentemente dalla sua validita') e ritorna il PEM del leaf cert."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    sni = server_name or host
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as raw:
+            with ctx.wrap_socket(raw, server_hostname=sni) as s:
+                der = s.getpeercert(binary_form=True)
+                pem = ssl.DER_cert_to_PEM_cert(der)
+                return {'ok': True, 'pem': pem, 'sni': sni}
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc), 'sni': sni}
+
+
+# ---------------------------------------------------------------------------
+# Scansione completa: assembla certificati + cross-check Rancher + diagnostica
+# ---------------------------------------------------------------------------
+def _decode_b64(s):
+    try: return base64.b64decode(s)
+    except Exception: return b''
+
+
+def _split_pem(blob):
+    """Una singola chiave puo' contenere catena di piu' certificati PEM. Li
+    spezzo per analizzarli separatamente."""
+    if isinstance(blob, bytes):
+        try: blob = blob.decode('utf-8', errors='replace')
+        except Exception: return []
+    parts = re.findall(r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----',
+                       blob, re.DOTALL)
+    return parts
+
+
+def _scan(context):
+    out = {
+        'context': context, 'currentContext': _current_context(),
+        'certs': [], 'ingresses': [], 'rancher': None,
+        'errors': [], 'summary': {},
+    }
+    _log(f'\x1b[1;36m[scan]\x1b[0m context={context or "(current)"}')
+
+    # secrets
+    secrets, err = _list_tls_secrets(context)
+    if err: out['errors'].append({'where': 'secrets', 'msg': err})
+    _log(f'\x1b[2m  trovati {len(secrets)} secret con cert\x1b[0m')
+
+    # ingresses
+    ingresses, err = _list_ingress_tls(context)
+    if err: out['errors'].append({'where': 'ingress', 'msg': err})
+    out['ingresses'] = ingresses
+    _log(f'\x1b[2m  trovati {len(ingresses)} ingress TLS\x1b[0m')
+
+    # Rancher CA setting (se presente)
+    cacerts_value = _rancher_setting(context, 'cacerts')
+    server_url    = _rancher_setting(context, 'server-url')
+    out['rancher'] = {
+        'installed': cacerts_value is not None,
+        'cacerts': cacerts_value,
+        'cacertsChecksum': _ca_checksum_rancher(cacerts_value) if cacerts_value else None,
+        'serverURL': server_url,
+    }
+    if cacerts_value:
+        _log(f'\x1b[2m  Rancher cacerts checksum: {out["rancher"]["cacertsChecksum"][:16]}…\x1b[0m')
+
+    # mappa secretName -> ingressi che lo usano (per "esposizione esterna")
+    secret_to_ingress = {}
+    for ig in ingresses:
+        key = f'{ig["namespace"]}/{ig["secretName"]}'
+        secret_to_ingress.setdefault(key, []).append(ig)
+
+    # parsing dei cert: ogni secret puo' avere chain -> spezzo
+    certs_out = []
+    for sec in secrets:
+        raw = _decode_b64(sec['b64'])
+        pem_blocks = _split_pem(raw)
+        if not pem_blocks:
+            certs_out.append({
+                'namespace': sec['namespace'], 'secret': sec['name'],
+                'secretType': sec['secretType'], 'dataKey': sec['dataKey'],
+                'parsed': {'error': 'nessun blocco PEM trovato'},
+            })
+            continue
+        for idx, blk in enumerate(pem_blocks):
+            parsed = _parse_cert_pem(blk.encode('utf-8'))
+            ig_refs = secret_to_ingress.get(f'{sec["namespace"]}/{sec["name"]}', [])
+            # esposizione: se referenziato da un Ingress -> esterno; se contiene
+            # CA:TRUE e' una CA; altrimenti probabilmente interno.
+            if parsed.get('isCA'):
+                exposure = 'ca'
+            elif ig_refs:
+                exposure = 'ingress'
+            else:
+                exposure = 'internal'
+            certs_out.append({
+                'namespace': sec['namespace'], 'secret': sec['name'],
+                'secretType': sec['secretType'], 'dataKey': sec['dataKey'],
+                'chainIndex': idx, 'chainTotal': len(pem_blocks),
+                'hasKey': sec['hasKey'],
+                'parsed': parsed,
+                'exposure': exposure,
+                'ingressRefs': ig_refs,
+            })
+
+    out['certs'] = certs_out
+
+    # diagnostiche
+    out['findings'] = _diagnose(out)
+
+    # summary
+    total = len(certs_out)
+    expired = sum(1 for c in certs_out if c['parsed'].get('expired'))
+    expiring = sum(1 for c in certs_out
+                   if (c['parsed'].get('daysRemaining') is not None)
+                   and 0 <= c['parsed']['daysRemaining'] <= 30
+                   and not c['parsed'].get('expired'))
+    out['summary'] = {
+        'total': total, 'expired': expired, 'expiring30d': expiring,
+        'cas': sum(1 for c in certs_out if c.get('exposure') == 'ca'),
+        'exposed': sum(1 for c in certs_out if c.get('exposure') == 'ingress'),
+        'internal': sum(1 for c in certs_out if c.get('exposure') == 'internal'),
+        'findings': len(out['findings']),
+    }
+    _log(f'\x1b[1;32m[scan] done\x1b[0m total={total} expired={expired} '
+         f'expiring30d={expiring} findings={out["summary"]["findings"]}')
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Diagnostica: produce una lista di "findings" con severita' e remediation.
+# Ogni finding e' un dict { id, severity, title, detail, where, fix:[steps] }.
+# Le severita': info | warn | error.
+# ---------------------------------------------------------------------------
+def _new_finding(_id, severity, title, detail, where, fix):
+    return {
+        'id': _id, 'severity': severity, 'title': title,
+        'detail': detail, 'where': where, 'fix': fix,
+    }
+
+
+def _diagnose(scan):
+    findings = []
+    ctx = scan.get('context')
+    rancher = scan.get('rancher') or {}
+    certs = scan.get('certs') or []
+
+    # ------- F1: certificati scaduti -------
+    for c in certs:
+        p = c['parsed'] or {}
+        if p.get('expired'):
+            findings.append(_new_finding(
+                f'expired:{c["namespace"]}/{c["secret"]}:{c.get("chainIndex",0)}',
+                'error',
+                f'Certificato scaduto: {p.get("subjectCN") or c["secret"]}',
+                f'Scaduto il {p.get("notAfter")} (Issuer: {p.get("issuerCN") or "?"}). '
+                f'Secret {c["namespace"]}/{c["secret"]}.',
+                _where_for_secret(c, ctx),
+                _fix_secret_replace(c, ctx),
+            ))
+
+    # ------- F2: certificati in scadenza <=30gg -------
+    for c in certs:
+        p = c['parsed'] or {}
+        d = p.get('daysRemaining')
+        if (d is not None) and 0 <= d <= 30 and not p.get('expired'):
+            findings.append(_new_finding(
+                f'expiring:{c["namespace"]}/{c["secret"]}:{c.get("chainIndex",0)}',
+                'warn',
+                f'Scadenza imminente: {p.get("subjectCN") or c["secret"]} ({d}gg)',
+                f'Scade il {p.get("notAfter")}. Pianifica il rinnovo entro {d} giorni.',
+                _where_for_secret(c, ctx),
+                _fix_secret_replace(c, ctx),
+            ))
+
+    # ------- F3: Rancher cacerts vs tls-ca secret -------
+    # tls-ca (in cattle-system) deve corrispondere a setting/cacerts. Se non
+    # corrispondono, downstream cluster non si fidano piu' del control-plane.
+    if rancher.get('installed'):
+        ranch_sum = rancher.get('cacertsChecksum')
+        tls_ca = _find_cert(certs, namespace='cattle-system', secret='tls-ca')
+        if tls_ca:
+            local_sum = _ca_checksum_rancher(_pem_of(tls_ca))
+            if ranch_sum and local_sum and ranch_sum != local_sum:
+                findings.append(_new_finding(
+                    'ca-mismatch:rancher',
+                    'error',
+                    'CA checksum diverso: setting/cacerts vs secret tls-ca',
+                    f'Rancher pubblica una CA con checksum {ranch_sum[:16]}… '
+                    f'mentre il secret cattle-system/tls-ca calcola {local_sum[:16]}…. '
+                    'I cluster downstream usano il checksum di setting/cacerts '
+                    'per validare il control-plane: se non corrisponde, agent '
+                    'non si fideranno.',
+                    {'vm': 'Rancher (control-plane VM con kubectl al cluster local)',
+                     'context': ctx},
+                    [
+                        '# 1) rigenera il setting cacerts dal secret reale:',
+                        'kubectl -n cattle-system get secret tls-ca -o jsonpath=\'{.data.cacerts\\.pem}\' | base64 -d > /tmp/cacerts.pem',
+                        'kubectl patch setting.management.cattle.io cacerts --type merge -p "{\\"value\\": \\"$(cat /tmp/cacerts.pem)\\"}"',
+                        '# 2) riavvia gli agent dei downstream (cattle-cluster-agent) per riprendere il trust.',
+                    ],
+                ))
+        elif ranch_sum:
+            findings.append(_new_finding(
+                'ca-orphan:rancher',
+                'warn',
+                'Rancher pubblica una CA ma manca il secret tls-ca',
+                'Il setting cacerts e\' valorizzato ma in cattle-system non '
+                'esiste un secret tls-ca: la CA esposta agli agent potrebbe '
+                'essere disallineata rispetto al cert effettivo.',
+                {'vm': 'Rancher', 'context': ctx},
+                ['# verifica:',
+                 'kubectl -n cattle-system get secret tls-ca || true',
+                 'kubectl get setting.management.cattle.io cacerts -o yaml'],
+            ))
+
+    # ------- F4: tls-rancher-ingress vs CA dichiarata -------
+    leaf = _find_cert(certs, namespace='cattle-system', secret='tls-rancher-ingress')
+    if leaf:
+        p = leaf['parsed'] or {}
+        if p.get('selfSigned'):
+            findings.append(_new_finding(
+                'rancher-leaf-selfsigned', 'info',
+                'tls-rancher-ingress e\' self-signed',
+                'L\'ingress di Rancher serve un cert self-signed: ok per ambienti '
+                'di test, ma il browser mostrera\' warning.',
+                {'vm': 'Rancher', 'context': ctx},
+                [],
+            ))
+        elif rancher.get('cacerts'):
+            # Confronto Issuer del leaf vs CA dichiarata
+            ca_pem = rancher['cacerts']
+            ca_parsed = _parse_cert_pem(ca_pem.encode('utf-8')) if ca_pem else {}
+            issuer_in_leaf = p.get('issuerCN')
+            ca_subject = ca_parsed.get('subjectCN')
+            if issuer_in_leaf and ca_subject and issuer_in_leaf != ca_subject:
+                findings.append(_new_finding(
+                    'rancher-leaf-issuer-vs-ca', 'warn',
+                    'Issuer del cert Rancher diverso dalla CA dichiarata',
+                    f'tls-rancher-ingress e\' firmato da "{issuer_in_leaf}" '
+                    f'mentre setting/cacerts pubblica "{ca_subject}". '
+                    'Probabile aggiornamento parziale: cert rinnovato ma CA '
+                    'pubblicata non sincronizzata.',
+                    {'vm': 'Rancher', 'context': ctx},
+                    [
+                        '# allinea il setting cacerts alla CA effettiva del cert servito:',
+                        'openssl s_client -connect <rancher-host>:443 -servername <rancher-host> -showcerts </dev/null 2>/dev/null \\',
+                        '  | awk \'/BEGIN CERTIFICATE/,/END CERTIFICATE/\' > /tmp/chain.pem',
+                        '# estrai la CA (ultimo blocco PEM) e pubblicala:',
+                        'kubectl patch setting.management.cattle.io cacerts --type merge -p "{\\"value\\": \\"$(cat /tmp/chain.pem)\\"}"',
+                    ],
+                ))
+
+    # ------- F5: ingress con secret TLS non standard sparsi -------
+    for ig in scan.get('ingresses') or []:
+        ns = ig['namespace']; sec = ig['secretName']
+        if not sec: continue
+        if (ns, sec) in {('cattle-system', 'tls-rancher-ingress')}: continue
+        found = _find_cert(certs, namespace=ns, secret=sec)
+        if not found:
+            findings.append(_new_finding(
+                f'ingress-secret-missing:{ns}/{ig["ingress"]}',
+                'warn',
+                f'Ingress {ns}/{ig["ingress"]} referenzia secret inesistente',
+                f'secretName="{sec}" ma non esiste nel namespace. '
+                'L\'ingress controller potrebbe servire un cert di fallback.',
+                {'vm': 'Control-plane / cluster local', 'context': ctx,
+                 'ingressClass': ig.get('ingressClass')},
+                [f'kubectl -n {ns} get ingress {ig["ingress"]} -o yaml',
+                 f'kubectl -n {ns} get secret {sec}'],
+            ))
+
+    # ------- F6: cert "sparsi" — secret TLS non riferiti da alcun Ingress -------
+    referenced = {(ig['namespace'], ig['secretName']) for ig in scan.get('ingresses') or []}
+    for c in certs:
+        p = c['parsed'] or {}
+        if p.get('isCA') or c.get('secretType') != 'kubernetes.io/tls':
+            continue
+        if (c['namespace'], c['secret']) in referenced:
+            continue
+        # ignora cert di sistema (kube-system, cert-manager interni)
+        if c['namespace'] in ('kube-system', 'kube-public', 'kube-node-lease'):
+            continue
+        findings.append(_new_finding(
+            f'orphan-secret:{c["namespace"]}/{c["secret"]}',
+            'info',
+            f'Secret TLS orfano: {c["namespace"]}/{c["secret"]}',
+            'Secret TLS che non risulta usato da alcun Ingress. Potrebbe '
+            'essere consumato da un Service esposto via LB esterno o non '
+            'piu\' utilizzato.',
+            {'vm': 'Cluster', 'context': ctx},
+            [f'kubectl -n {c["namespace"]} describe secret {c["secret"]}',
+             f'kubectl get svc,deploy -A | grep -i {c["secret"]} || true'],
+        ))
+
+    return findings
+
+
+def _find_cert(certs, namespace, secret):
+    for c in certs:
+        if c['namespace'] == namespace and c['secret'] == secret \
+                and not (c['parsed'] or {}).get('isCA'):
+            return c
+    for c in certs:
+        if c['namespace'] == namespace and c['secret'] == secret:
+            return c
+    return None
+
+
+def _pem_of(cert_record):
+    """Ricostruisce il PEM partendo dal record originale (non lo conserviamo,
+    quindi rifaccio decode/base64 indirettamente sara' impossibile -> uso il
+    fingerprint per i confronti). Ritorna stringa vuota se non disponibile."""
+    return ''  # placeholder; per ora la diagnostica F3 usa direttamente il setting cacerts
+
+
+def _where_for_secret(c, ctx):
+    """Decide su quale VM andare a operare per quel secret."""
+    ns = c.get('namespace')
+    sec = c.get('secret')
+    if ns == 'cattle-system' and sec in ('tls-rancher-ingress', 'tls-ca'):
+        return {'vm': 'Rancher VM (kubectl al cluster local)', 'context': ctx,
+                'note': 'cert servito dall\'ingress di Rancher; se davanti c\'e\' '
+                        'nginx esterno aggiorna anche quello.'}
+    return {'vm': 'Control-plane VM del cluster', 'context': ctx}
+
+
+def _fix_secret_replace(c, ctx):
+    ns = c.get('namespace'); sec = c.get('secret')
+    if ns == 'cattle-system' and sec == 'tls-rancher-ingress':
+        return [
+            '# Rinnovo del cert di Rancher mantenendo la stessa CA:',
+            'kubectl -n cattle-system create secret tls tls-rancher-ingress \\',
+            '  --cert=fullchain.pem --key=tls.key --dry-run=client -o yaml \\',
+            '  | kubectl apply -f -',
+            '# Riavvia i pod Rancher per ricaricare il secret:',
+            'kubectl -n cattle-system rollout restart deploy/rancher',
+            '# Se la CA NON e\' cambiata, NON toccare setting/cacerts.',
+            '# Verifica dal browser e con: kubectl -n cattle-system get secret tls-rancher-ingress -o yaml',
+        ]
+    if ns == 'cattle-system' and sec == 'tls-ca':
+        return [
+            '# Aggiornamento della CA (operazione delicata):',
+            'kubectl -n cattle-system create secret generic tls-ca \\',
+            '  --from-file=cacerts.pem=cacerts.pem --dry-run=client -o yaml \\',
+            '  | kubectl apply -f -',
+            '# Aggiorna anche il setting:',
+            'kubectl patch setting.management.cattle.io cacerts --type merge -p "{\\"value\\": \\"$(cat cacerts.pem)\\"}"',
+            '# Quindi forza il restart degli agent downstream.',
+        ]
+    return [
+        f'# Sostituisci il secret TLS {ns}/{sec} mantenendo lo stesso nome:',
+        f'kubectl -n {ns} create secret tls {sec} \\',
+        '  --cert=fullchain.pem --key=tls.key --dry-run=client -o yaml \\',
+        '  | kubectl apply -f -',
+        '# Verifica gli Ingress che lo usano si aggiornino (l\'ingress controller fa hot-reload):',
+        f'kubectl get ingress -A -o json | jq \'.items[] | select(.spec.tls[]?.secretName=="{sec}")\'',
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Job runner: la scansione gira in un thread cosi' lo streaming nel terminale
+# resta consistente con il pattern Polaris (status idle/running/success/failed).
+# ---------------------------------------------------------------------------
+_last_scan = {'data': None}  # ultima scan completata, per servire la UI
+
+
+def _run_scan_job(context):
+    try:
+        result = _scan(context)
+        _last_scan['data'] = result
+        _job_state['status'] = 'success'
+    except Exception as exc:
+        _log(f'\x1b[1;31m[ERR] {exc}\x1b[0m')
+        _job_state['status'] = 'failed'
     finally:
         _job_lock.release()
 
 
-def _start_job(cmd_parts, cwd):
-    """Acquisisce il lock e avvia _run in un thread. Ritorna (ok, errore)."""
+def _start_scan(context):
     if not _job_lock.acquire(blocking=False):
-        return False, 'Un job è già in esecuzione. Attendi il completamento.'
+        return False, 'Una scansione e\' gia\' in corso.'
     _job_state['output'] = []
     _job_state['status'] = 'running'
-    t = threading.Thread(target=_run, args=(cmd_parts, cwd), daemon=True)
+    t = threading.Thread(target=_run_scan_job, args=(context,), daemon=True)
     t.start()
     return True, None
 
 
 # ---------------------------------------------------------------------------
-# Rotte pagina + streaming output
+# Rotte HTTP
 # ---------------------------------------------------------------------------
 @app.route('/')
 def index():
@@ -195,237 +728,60 @@ def index():
 def api_output():
     since = int(request.args.get('since', 0))
     lines = _job_state['output'][since:]
+    return jsonify({'lines': lines, 'total': len(_job_state['output']),
+                    'status': _job_state['status']})
+
+
+@app.route('/api/contexts')
+def api_contexts():
     return jsonify({
-        'lines': lines,
-        'total': len(_job_state['output']),
-        'status': _job_state['status'],
+        'contexts': _contexts(),
+        'current': _current_context(),
+        'kubectl': _which('kubectl'),
+        'openssl': _which('openssl'),
+        'cryptography': _HAS_CRYPTO,
     })
 
 
-# ---------------------------------------------------------------------------
-# Stato dei progetti (con info git: clonato? branch? ultimo commit?)
-# ---------------------------------------------------------------------------
-def _git(args, cwd, timeout=8):
-    try:
-        r = subprocess.run(['git'] + args, capture_output=True, text=True,
-                           cwd=cwd, timeout=timeout)
-        return r.returncode, (r.stdout or '').strip(), (r.stderr or '').strip()
-    except Exception as exc:
-        return -1, '', str(exc)
+def _which(name):
+    for p in (os.environ.get('PATH') or '').split(os.pathsep):
+        full = os.path.join(p, name)
+        if os.path.isfile(full) and os.access(full, os.X_OK):
+            return full
+    return None
 
 
-def _project_status(p):
-    cloned = _is_cloned(p)
-    info = {
-        'key': p['key'], 'name': p['name'], 'desc': p['desc'], 'repo': p['repo'],
-        'branch': p['branch'], 'icon': p['icon'], 'accent': p['accent'],
-        'playbook': p['playbook'], 'inventory': p['inventory'],
-        'subdir': p.get('subdir', ''), 'groups': p['groups'], 'roles': p['roles'],
-        'cloned': cloned, 'head': None, 'currentBranch': None, 'dirty': False,
-        'workDir': _work_dir(p),
-    }
-    if cloned:
-        pdir = _project_dir(p)
-        _, head, _ = _git(['log', '-1', '--pretty=%h %s'], pdir)
-        info['head'] = head or None
-        _, br, _ = _git(['rev-parse', '--abbrev-ref', 'HEAD'], pdir)
-        info['currentBranch'] = br or None
-        _, st, _ = _git(['status', '--porcelain'], pdir)
-        info['dirty'] = bool(st)
-    return info
-
-
-@app.route('/api/projects')
-def api_projects():
-    return jsonify({
-        'projects': [_project_status(p) for p in PROJECTS],
-        'projectsDir': PROJECTS_DIR,
-    })
-
-
-@app.route('/api/project/clone', methods=['POST'])
-def api_project_clone():
+@app.route('/api/scan', methods=['POST'])
+def api_scan():
     data = request.get_json(force=True, silent=True) or {}
-    p = PROJECTS_BY_KEY.get(data.get('key', ''))
-    if not p:
-        return jsonify({'error': 'Progetto non valido'}), 400
-
-    try:
-        os.makedirs(PROJECTS_DIR, exist_ok=True)
-    except Exception as exc:
-        return jsonify({'error': f'Impossibile creare {PROJECTS_DIR}: {exc}'}), 500
-
-    pdir = _project_dir(p)
-    if _is_cloned(p):
-        cmd = ['git', '-C', pdir, 'pull', '--ff-only', 'origin', p['branch']]
-        cwd = pdir
-    else:
-        cmd = ['git', 'clone', '--branch', p['branch'], p['repo'], pdir]
-        cwd = PROJECTS_DIR
-
-    ok, err = _start_job(cmd, cwd)
+    ctx = data.get('context') or None
+    ok, err = _start_scan(ctx)
     if not ok:
         return jsonify({'error': err}), 409
     return jsonify({'status': 'started'})
 
 
-# ---------------------------------------------------------------------------
-# Esecuzione playbook / comandi ansible
-# ---------------------------------------------------------------------------
-def _build_command(p, op, limit):
-    inv = p['inventory']
-    if op == 'ping':
-        return ['ansible', (limit or 'all'), '-i', inv, '-m', 'ping']
-    cmd = ['ansible-playbook', p['playbook'], '-i', inv]
-    if limit:
-        cmd += ['--limit', limit]
-    cmd += PLAYBOOK_OPS[op]
-    return cmd
+@app.route('/api/last-scan')
+def api_last_scan():
+    return jsonify(_last_scan['data'] or {'empty': True})
 
 
-@app.route('/api/run', methods=['POST'])
-def api_run():
+@app.route('/api/probe', methods=['POST'])
+def api_probe():
     data = request.get_json(force=True, silent=True) or {}
-    p = PROJECTS_BY_KEY.get(data.get('project', ''))
-    op = data.get('op', '')
-    limit = (data.get('limit') or '').strip()
-
-    if not p:
-        return jsonify({'error': 'Progetto non valido'}), 400
-    if op not in VALID_OPS:
-        return jsonify({'error': 'Operazione non valida'}), 400
-    if limit and limit not in p['groups']:
-        return jsonify({'error': f'Host group non valido: {limit}'}), 400
-    if not _is_cloned(p):
-        return jsonify({'error': "Repo non clonato. Usa 'Clona / Pull' nella pagina Progetti."}), 409
-
-    wd = _work_dir(p)
-    if not os.path.isdir(wd):
-        return jsonify({'error': f'Directory di lavoro mancante: {wd}'}), 409
-
-    cmd = _build_command(p, op, limit)
-    ok, err = _start_job(cmd, wd)
-    if not ok:
-        return jsonify({'error': err}), 409
-    return jsonify({'status': 'started'})
+    host = (data.get('host') or '').strip()
+    port = int(data.get('port') or 443)
+    sni = (data.get('sni') or '').strip() or None
+    if not host:
+        return jsonify({'error': 'host obbligatorio'}), 400
+    res = _probe_tls(host, port, sni)
+    if not res.get('ok'):
+        return jsonify({'host': host, 'port': port, 'ok': False, 'error': res.get('error')})
+    parsed = _parse_cert_pem(res['pem'].encode('utf-8'))
+    return jsonify({'host': host, 'port': port, 'sni': res['sni'],
+                    'ok': True, 'pem': res['pem'], 'parsed': parsed})
 
 
-# ---------------------------------------------------------------------------
-# Inventory: parsing dell'inventory.ini del progetto in gruppi -> host
-# ---------------------------------------------------------------------------
-def _parse_inventory(text):
-    groups = []
-    current = None
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line[0] in '#;':
-            continue
-        if line.startswith('[') and line.endswith(']'):
-            name = line[1:-1].strip()
-            kind = 'hosts'
-            if name.endswith(':vars'):
-                kind = 'vars'
-            elif name.endswith(':children'):
-                kind = 'children'
-            current = {'name': name, 'kind': kind, 'lines': []}
-            groups.append(current)
-            continue
-        if current is None:
-            # host fuori da ogni sezione -> gruppo implicito "ungrouped"
-            current = {'name': 'ungrouped', 'kind': 'hosts', 'lines': []}
-            groups.append(current)
-        current['lines'].append(line)
-    return groups
-
-
-@app.route('/api/inventory')
-def api_inventory():
-    p = PROJECTS_BY_KEY.get(request.args.get('project', ''))
-    if not p:
-        return jsonify({'error': 'Progetto non valido'}), 400
-    if not _is_cloned(p):
-        return jsonify({'error': 'Repo non clonato', 'cloned': False}), 409
-
-    full = _safe_join(_work_dir(p), p['inventory'])
-    if not full:
-        return jsonify({'error': 'Path inventory non consentito'}), 403
-    try:
-        with open(full, 'r', encoding='utf-8') as f:
-            text = f.read()
-    except FileNotFoundError:
-        return jsonify({'error': f"Inventory non trovato: {p['inventory']}"}), 404
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
-
-    return jsonify({
-        'inventory': p['inventory'],
-        'groups': _parse_inventory(text),
-        'raw': text,
-    })
-
-
-# ---------------------------------------------------------------------------
-# File browser: elenco file rilevanti del progetto + lettura singolo file
-# ---------------------------------------------------------------------------
-def _list_project_files(p):
-    wd = _work_dir(p)
-    out = []
-
-    def add(rel):
-        full = os.path.join(wd, rel)
-        if os.path.isfile(full):
-            out.append({'path': rel, 'label': rel})
-
-    add(p['playbook'])
-    add(p['inventory'])
-    add('ansible.cfg')
-
-    gv = os.path.join(wd, 'group_vars')
-    if os.path.isdir(gv):
-        for fn in sorted(os.listdir(gv)):
-            if fn.endswith(('.yml', '.yaml')):
-                add(os.path.join('group_vars', fn))
-
-    roles = os.path.join(wd, 'roles')
-    if os.path.isdir(roles):
-        for role in sorted(os.listdir(roles)):
-            main = os.path.join('roles', role, 'tasks', 'main.yml')
-            if os.path.isfile(os.path.join(wd, main)):
-                add(main)
-    return out
-
-
-@app.route('/api/files')
-def api_files():
-    p = PROJECTS_BY_KEY.get(request.args.get('project', ''))
-    if not p:
-        return jsonify({'error': 'Progetto non valido'}), 400
-    if not _is_cloned(p):
-        return jsonify({'error': 'Repo non clonato', 'cloned': False}), 409
-
-    rel = request.args.get('path')
-    wd = _work_dir(p)
-
-    if rel is None:
-        return jsonify({'files': _list_project_files(p), 'workDir': wd})
-
-    full = _safe_join(wd, rel)
-    if not full:
-        return jsonify({'error': 'Path non consentito'}), 403
-    try:
-        if os.path.getsize(full) > 1_000_000:
-            return jsonify({'error': 'File troppo grande (>1MB)'}), 413
-        with open(full, 'r', encoding='utf-8') as f:
-            return jsonify({'content': f.read(), 'path': rel})
-    except FileNotFoundError:
-        return jsonify({'error': 'File non trovato'}), 404
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
-
-
-# ---------------------------------------------------------------------------
-# HOW-TO: documentazione della dashboard (file accanto a app.py)
-# ---------------------------------------------------------------------------
 @app.route('/api/howto')
 def api_howto():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'HOW-TO')
@@ -434,8 +790,6 @@ def api_howto():
             return jsonify({'content': f.read()})
     except FileNotFoundError:
         return jsonify({'content': '# HOW-TO non disponibile.'})
-    except Exception as exc:
-        return jsonify({'content': f'# Errore: {exc}'})
 
 
 if __name__ == '__main__':

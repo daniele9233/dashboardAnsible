@@ -3,11 +3,9 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-ansible-env/
-ansible-projects/
 .env
-.vaultpass
-*.vaultpass
+*.pem
+*.key
 *.log
 .DS_Store
 .idea/

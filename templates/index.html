@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=1280" />
-<title>Polaris · Ansible Control Plane</title>
+<title>Polaris · Cert Inspector</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><path d='M20,2L23,17L38,20L23,23L20,38L17,23L2,20L17,17Z' fill='%23e8a838'/></svg>" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -289,7 +289,7 @@
       </div>
       <div class="leading-tight">
         <div class="font-bold tracking-tight text-[15px]">Polaris</div>
-        <div class="text-[11px] font-light text-fg-mute -mt-0.5">Ansible Control Plane</div>
+        <div class="text-[11px] font-light text-fg-mute -mt-0.5">Cert Inspector</div>
       </div>
     </div>
 
@@ -302,31 +302,31 @@
         </summary>
         <ul class="mt-1 space-y-px">
           <li><a href="#/dashboard" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="dashboard"><i data-lucide="home" class="w-4 h-4"></i>Dashboard</a></li>
-          <li><a href="#/projects" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="projects"><i data-lucide="boxes" class="w-4 h-4"></i>Progetti</a></li>
+          <li><a href="#/cluster" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="cluster"><i data-lucide="boxes" class="w-4 h-4"></i>Cluster</a></li>
           <li><a href="#/activity" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="activity"><i data-lucide="square-terminal" class="w-4 h-4"></i>Activity Log</a></li>
         </ul>
       </details>
 
       <details open>
         <summary class="flex items-center justify-between px-3 py-1 cursor-pointer">
-          <span class="section-label">Operations</span>
+          <span class="section-label">Certificates</span>
           <i data-lucide="chevron-right" class="caret w-3 h-3 text-fg-dim transition-transform"></i>
         </summary>
         <ul class="mt-1 space-y-px">
-          <li><a href="#/dryrun" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="dryrun"><i data-lucide="flask-conical" class="w-4 h-4"></i>Dry-Run</a></li>
-          <li><a href="#/deploy" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="deploy"><i data-lucide="rocket" class="w-4 h-4"></i>Deploy</a></li>
-          <li><a href="#/checks" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="checks"><i data-lucide="shield-check" class="w-4 h-4"></i>Controlli</a></li>
+          <li><a href="#/certs" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="certs"><i data-lucide="file-key" class="w-4 h-4"></i>Tutti i certificati</a></li>
+          <li><a href="#/ca" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="ca"><i data-lucide="shield" class="w-4 h-4"></i>CA &amp; Catena</a></li>
+          <li><a href="#/ingress" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="ingress"><i data-lucide="globe" class="w-4 h-4"></i>Ingress &amp; sparsi</a></li>
         </ul>
       </details>
 
       <details open>
         <summary class="flex items-center justify-between px-3 py-1 cursor-pointer">
-          <span class="section-label">Resources</span>
+          <span class="section-label">Diagnostica</span>
           <i data-lucide="chevron-right" class="caret w-3 h-3 text-fg-dim transition-transform"></i>
         </summary>
         <ul class="mt-1 space-y-px">
-          <li><a href="#/inventory" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="inventory"><i data-lucide="server" class="w-4 h-4"></i>Inventory</a></li>
-          <li><a href="#/files" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="files"><i data-lucide="file-code-2" class="w-4 h-4"></i>File</a></li>
+          <li><a href="#/findings" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="findings"><i data-lucide="alert-triangle" class="w-4 h-4"></i>Anomalie &amp; fix</a></li>
+          <li><a href="#/probe" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="probe"><i data-lucide="radio" class="w-4 h-4"></i>Probe TLS esterno</a></li>
         </ul>
       </details>
 
@@ -342,7 +342,7 @@
     </nav>
 
     <div class="px-4 py-3 border-t border-rule text-[11px] text-fg-dim flex items-center justify-between">
-      <span>Polaris · v0.6.0</span>
+      <span>Polaris · v1.0.0</span>
       <span class="inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>online</span>
     </div>
   </aside>
@@ -363,38 +363,26 @@
 
       <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md bg-ink-700 border border-rule text-[12px] text-fg-mute">
         <i data-lucide="box" class="w-3.5 h-3.5 text-brand"></i>
-        <span>Progetto</span>
-        <select id="project-select" class="bg-transparent text-fg text-[12px] font-medium focus:outline-none cursor-pointer max-w-[200px]"></select>
+        <span>Context</span>
+        <select id="ctx-select" class="bg-transparent text-fg text-[12px] font-medium focus:outline-none cursor-pointer max-w-[260px]"></select>
       </div>
 
       <div class="flex items-center gap-0.5">
+        <button class="btn btn-primary btn-sm" id="btn-scan"><i data-lucide="search" class="w-4 h-4"></i>Scansiona</button>
         <button class="icon-btn" id="btn-refresh" title="Aggiorna"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
-
-        <div class="relative">
-          <button class="icon-btn relative" id="btn-notif" title="Notifiche" aria-haspopup="true" aria-expanded="false">
-            <i data-lucide="bell" class="w-4 h-4"></i>
-            <span id="notif-badge" class="hidden absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-brand text-ink-900 text-[10px] font-semibold flex items-center justify-center">0</span>
-          </button>
-          <div id="pop-notif" class="popover hidden absolute right-0 mt-2 w-80 card z-50 overflow-hidden" style="box-shadow:0 16px 48px rgba(0,0,0,.55)">
-            <div class="px-4 py-3 border-b border-rule flex items-center justify-between">
-              <span class="font-medium text-[13px]">Notifiche</span>
-              <button class="text-[11px] text-fg-mute hover:text-fg" id="notif-clear">Pulisci</button>
-            </div>
-            <div id="notif-list" class="max-h-[320px] overflow-auto"></div>
-            <a href="#/activity" class="block px-4 py-2.5 text-[12px] text-brand hover:text-brand-hi border-t border-rule" data-pop-close>Apri Activity Log →</a>
-          </div>
-        </div>
 
         <div class="relative">
           <button class="icon-btn" id="btn-settings" title="Info" aria-haspopup="true" aria-expanded="false"><i data-lucide="settings" class="w-4 h-4"></i></button>
           <div id="pop-settings" class="popover hidden absolute right-0 mt-2 w-80 card z-50 overflow-hidden" style="box-shadow:0 16px 48px rgba(0,0,0,.55)">
             <div class="px-4 py-3 border-b border-rule">
-              <div class="font-medium text-[13px]">Polaris · Ansible Control Plane</div>
-              <div class="text-[11px] text-fg-mute mt-0.5">Esegui i tuoi playbook Ansible da un'unica console</div>
+              <div class="font-medium text-[13px]">Polaris · Cert Inspector</div>
+              <div class="text-[11px] text-fg-mute mt-0.5">Diagnostica certificati Kubernetes / Rancher · read-only</div>
             </div>
             <div class="px-4 py-3 text-[12px] space-y-2">
-              <div class="flex items-center justify-between"><span class="text-fg-mute">Versione</span><span class="font-mono text-fg">v0.6.0</span></div>
-              <div class="flex items-center justify-between gap-3"><span class="text-fg-mute shrink-0">Projects dir</span><span class="font-mono text-fg truncate" id="settings-projectsdir">…</span></div>
+              <div class="flex items-center justify-between"><span class="text-fg-mute">Versione</span><span class="font-mono text-fg">v1.0.0</span></div>
+              <div class="flex items-center justify-between gap-3"><span class="text-fg-mute shrink-0">kubectl</span><span class="font-mono text-fg truncate" id="settings-kubectl">…</span></div>
+              <div class="flex items-center justify-between gap-3"><span class="text-fg-mute shrink-0">openssl</span><span class="font-mono text-fg truncate" id="settings-openssl">…</span></div>
+              <div class="flex items-center justify-between gap-3"><span class="text-fg-mute shrink-0">cryptography</span><span class="font-mono text-fg" id="settings-crypto">…</span></div>
               <div class="flex items-center justify-between"><span class="text-fg-mute">Backend</span><span class="font-mono text-fg" id="settings-backend">checking…</span></div>
             </div>
             <a href="#/howto" class="flex items-center gap-2 px-4 py-2.5 text-[12px] text-brand hover:text-brand-hi border-t border-rule" data-pop-close><i data-lucide="book-open" class="w-3.5 h-3.5"></i>Apri documentazione</a>
@@ -408,10 +396,10 @@
               <div class="w-9 h-9 rounded-full bg-ink-500 border border-rule flex items-center justify-center text-[12px] font-semibold">DP</div>
               <div class="min-w-0">
                 <div class="text-[13px] font-medium truncate">Daniele</div>
-                <div class="text-[11px] text-fg-mute font-mono truncate">ansible controller</div>
+                <div class="text-[11px] text-fg-mute font-mono truncate">cert inspector</div>
               </div>
             </div>
-            <div class="px-4 py-2.5 text-[11px] text-fg-mute">Sessione locale · controller Ansible</div>
+            <div class="px-4 py-2.5 text-[11px] text-fg-mute">Sessione locale · read-only</div>
           </div>
         </div>
       </div>
@@ -421,145 +409,131 @@
     <div id="content" class="flex-1 min-w-0 bg-ink-800">
 
       <!-- ===================== DASHBOARD ===================== -->
-      <section data-screen-label="01 Dashboard" data-screen="dashboard" class="p-8 max-w-[1400px] rise">
+      <section data-screen="dashboard" class="p-8 max-w-[1400px] rise">
         <div class="relative mb-8">
           <div class="absolute inset-0 grid-bg opacity-50 -mx-8 -mt-8 -mb-4 rounded-b-lg" style="pointer-events:none"></div>
           <div class="relative">
-            <div class="text-[11px] tracking-[0.15em] uppercase text-fg-dim mb-2">Ansible · Control Plane</div>
-            <h1 class="text-[26px] font-semibold leading-tight">Bentornato su Polaris</h1>
-            <p class="text-fg-mute mt-1 text-[14px]">Una sola console per i tuoi repository Ansible: clona, ispeziona l'inventory, lancia dry-run e applica i playbook ai tuoi host — con output live in tempo reale.</p>
+            <div class="text-[11px] tracking-[0.15em] uppercase text-fg-dim mb-2">Certificate Operations</div>
+            <h1 class="text-[26px] font-semibold leading-tight">Cert Inspector</h1>
+            <p class="text-fg-mute mt-1 text-[14px]">Tutto sui certificati del cluster: cosa serve l'ingress, cosa vive solo internamente, quale CA li firma, e dove gli aggiornamenti sono parziali. Per ogni anomalia trovi il fix e la VM su cui eseguirlo.</p>
           </div>
         </div>
 
-        <div class="grid grid-cols-3 gap-4 mb-6">
-          <!-- Projects -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
           <div class="card card-hover p-5">
             <div class="flex items-start gap-4">
-              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0" id="dash-proj-ring" style="--ring-color:#6a7280; --ring-val:100">
-                <div class="text-center" id="dash-proj-center">
-                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">REPOS</div>
+              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0" id="d-total-ring" style="--ring-color:#6a7280; --ring-val:100">
+                <div class="text-center" id="d-total-center">
+                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">CERTS</div>
                   <div class="text-[15px] font-bold leading-none text-fg-mute">—</div>
                 </div>
               </div>
               <div class="min-w-0 flex-1">
-                <div class="section-label mb-1">Progetti</div>
-                <div class="text-[14px] font-medium" id="dash-proj-text">Checking…</div>
-                <div class="text-[12px] text-fg-mute mt-0.5">repository clonati in locale</div>
-                <a href="#/projects" class="inline-flex items-center gap-1 text-[12px] text-brand hover:text-brand-hi mt-2">Gestisci progetti <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+                <div class="section-label mb-1">Trovati</div>
+                <div class="text-[14px] font-medium" id="d-total-text">nessuna scansione</div>
+                <div class="text-[12px] text-fg-mute mt-0.5">cert dentro il cluster</div>
               </div>
             </div>
           </div>
-
-          <!-- Active project -->
           <div class="card card-hover p-5">
             <div class="flex items-start gap-4">
-              <div class="w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0 bg-ink-700 border border-rule">
-                <i data-lucide="box" id="dash-active-icon" class="w-7 h-7 text-brand"></i>
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="section-label mb-1">Progetto attivo</div>
-                <div class="text-[14px] font-medium truncate" id="dash-active-name">—</div>
-                <div class="text-[12px] text-fg-mute mt-0.5 truncate" id="dash-active-sub">seleziona un progetto</div>
-                <a href="#/deploy" class="inline-flex items-center gap-1 text-[12px] text-brand hover:text-brand-hi mt-2">Vai a Deploy <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
-              </div>
-            </div>
-          </div>
-
-          <!-- Last Operation -->
-          <div class="card card-hover p-5" id="card-last-op">
-            <div class="flex items-start gap-4">
-              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0" id="last-op-ring" style="--ring-color:#6a7280; --ring-val:100">
-                <div class="text-center" id="last-op-center">
-                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">JOB</div>
-                  <div class="text-[12.5px] font-bold leading-none text-fg-mute">IDLE</div>
+              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0" id="d-exp-ring" style="--ring-color:#6a7280; --ring-val:100">
+                <div class="text-center" id="d-exp-center">
+                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">SCADUTI</div>
+                  <div class="text-[15px] font-bold leading-none text-fg-mute">—</div>
                 </div>
               </div>
               <div class="min-w-0 flex-1">
-                <div class="section-label mb-1">Ultima operazione</div>
-                <div class="text-[14px] font-medium truncate" id="last-op-name">—</div>
-                <div class="text-[12px] text-fg-mute mt-0.5" id="last-op-time">nessun job in questa sessione</div>
-                <a href="#/activity" class="inline-flex items-center gap-1 text-[12px] text-brand hover:text-brand-hi mt-2">Apri log <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+                <div class="section-label mb-1">Scaduti</div>
+                <div class="text-[14px] font-medium" id="d-exp-text">—</div>
+                <div class="text-[12px] text-fg-mute mt-0.5">notAfter &lt; oggi</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-hover p-5">
+            <div class="flex items-start gap-4">
+              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0" id="d-30d-ring" style="--ring-color:#6a7280; --ring-val:100">
+                <div class="text-center" id="d-30d-center">
+                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">≤30G</div>
+                  <div class="text-[15px] font-bold leading-none text-fg-mute">—</div>
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="section-label mb-1">In scadenza</div>
+                <div class="text-[14px] font-medium" id="d-30d-text">—</div>
+                <div class="text-[12px] text-fg-mute mt-0.5">prossimi 30 giorni</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-hover p-5">
+            <div class="flex items-start gap-4">
+              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0" id="d-find-ring" style="--ring-color:#6a7280; --ring-val:100">
+                <div class="text-center" id="d-find-center">
+                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">ALERT</div>
+                  <div class="text-[15px] font-bold leading-none text-fg-mute">—</div>
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="section-label mb-1">Anomalie</div>
+                <div class="text-[14px] font-medium" id="d-find-text">—</div>
+                <div class="text-[12px] text-fg-mute mt-0.5"><a href="#/findings" class="text-brand hover:text-brand-hi">apri lista →</a></div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Projects strip -->
+        <!-- breakdown esposizione -->
         <div class="card mb-6">
           <div class="flex items-center justify-between px-6 py-4 border-b border-rule">
             <div>
-              <h2 class="text-[15px] font-semibold">I tuoi progetti</h2>
-              <p class="text-[12px] text-fg-mute">Click su un progetto per renderlo attivo</p>
+              <h2 class="text-[15px] font-semibold">Breakdown esposizione</h2>
+              <p class="text-[12px] text-fg-mute">Dove vivono i certificati trovati nell'ultima scansione</p>
             </div>
-            <a href="#/projects" class="text-[12px] text-brand hover:text-brand-hi inline-flex items-center gap-1">Apri Progetti <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+            <a href="#/certs" class="text-[12px] text-brand hover:text-brand-hi inline-flex items-center gap-1">Apri lista <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
           </div>
-          <div class="p-4 flex flex-wrap gap-2" id="dash-proj-strip">
-            <span class="text-[12px] text-fg-mute px-2 py-1">Caricamento…</span>
+          <div class="p-4 flex flex-wrap gap-2" id="d-breakdown">
+            <span class="text-[12px] text-fg-mute px-2 py-1">Lancia una scansione per popolare la dashboard.</span>
           </div>
         </div>
 
-        <!-- Activity chart -->
-        <div class="card mb-6 hidden" id="activity-chart-card">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-rule">
-            <div>
-              <h2 class="text-[15px] font-semibold">Attività recente</h2>
-              <p class="text-[12px] text-fg-mute">Esiti dei job di questa sessione — verde successo, rosso fallito</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <select id="chart-range" class="field !w-auto !h-8 !text-[12px]"><option value="month">Ultimo mese</option><option value="week">Ultima settimana</option><option value="day">Ultime 24h</option></select>
-              <select id="chart-type" class="field !w-auto !h-8 !text-[12px]"><option value="all">Tutti i tipi</option><option value="Deploy">Deploy</option><option value="Dry-Run">Dry-Run</option></select>
-            </div>
-          </div>
-          <div class="p-6 pt-4">
-            <div class="h-[220px]"><canvas id="activityChart"></canvas></div>
-          </div>
-        </div>
-
-        <!-- Recent jobs -->
+        <!-- top findings -->
         <div class="card">
           <div class="flex items-center justify-between px-6 py-4 border-b border-rule">
             <div>
-              <h2 class="text-[15px] font-semibold">Job recenti</h2>
-              <p class="text-[12px] text-fg-mute">Salvati in <span class="font-mono">localStorage · ansible-job-history</span></p>
+              <h2 class="text-[15px] font-semibold">Anomalie principali</h2>
+              <p class="text-[12px] text-fg-mute">Apri "Anomalie &amp; fix" per la lista completa e i comandi</p>
             </div>
-            <button class="btn btn-ghost btn-sm" id="btn-clear-history"><i data-lucide="eraser" class="w-3.5 h-3.5"></i>Pulisci storico</button>
+            <a href="#/findings" class="text-[12px] text-brand hover:text-brand-hi inline-flex items-center gap-1">Tutte le anomalie <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
           </div>
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th class="w-24">ID</th>
-                <th>Nome</th>
-                <th class="w-32">Stato</th>
-                <th class="w-32">Tipo</th>
-                <th class="w-44">Terminato</th>
-                <th class="w-10"></th>
-              </tr>
-            </thead>
-            <tbody id="jobs-tbody"></tbody>
-          </table>
-          <div id="jobs-empty" class="hidden px-6 py-12 text-center text-fg-mute text-[13px]">
-            Nessun job — lancia un dry-run o un deploy per popolare questa lista.
+          <div id="d-top-findings" class="divide-y divide-rule">
+            <div class="px-6 py-8 text-center text-fg-mute text-[13px]">Nessuna scansione disponibile.</div>
           </div>
         </div>
       </section>
 
-      <!-- ===================== PROGETTI ===================== -->
-      <section data-screen-label="02 Progetti" data-screen="projects" class="p-8 max-w-[1400px] hidden rise">
-        <div class="flex items-start justify-between mb-6 gap-4">
-          <div>
-            <h1 class="text-[26px] font-semibold leading-tight">Progetti</h1>
-            <p class="text-fg-mute mt-1 text-[14px]">I repository Ansible gestiti da questa dashboard. Clona o aggiorna (pull) un repo, poi rendilo attivo per operare.</p>
+      <!-- ===================== CLUSTER ===================== -->
+      <section data-screen="cluster" class="p-8 max-w-[1100px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">Cluster</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Scegli un context kubectl e lancia una scansione. La dashboard usa il kubectl gia' configurato sul controller.</p>
+
+        <div class="card p-6 mb-4 max-w-[760px]">
+          <label class="text-[12px] font-medium text-fg-mute">kubectl context</label>
+          <select id="cluster-ctx" class="field mt-2"></select>
+          <p class="text-[11px] text-fg-dim mt-2">Vuoto = current context. Aggiungi context con <span class="font-mono text-fg">kubectl config use-context</span> sul controller.</p>
+          <div class="hairline my-5"></div>
+          <div class="flex items-center justify-between gap-3 text-[12px] text-fg-mute flex-wrap">
+            <div class="flex items-center gap-2"><i data-lucide="shield" class="w-4 h-4 text-info"></i>Operazione read-only: <span class="font-mono">kubectl get secret/ingress/settings</span></div>
+            <button class="btn btn-primary btn-sm" id="btn-cluster-scan"><i data-lucide="search" class="w-4 h-4"></i>Scansiona</button>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-4" id="projects-grid">
-          <div class="text-fg-mute text-[13px]">Caricamento progetti…</div>
-        </div>
+
+        <div id="cluster-summary" class="max-w-[760px]"></div>
       </section>
 
       <!-- ===================== ACTIVITY LOG ===================== -->
-      <section data-screen-label="03 Activity" data-screen="activity" class="p-8 max-w-[1400px] hidden rise">
+      <section data-screen="activity" class="p-8 max-w-[1400px] hidden rise">
         <h1 class="text-[26px] font-semibold leading-tight">Activity Log</h1>
-        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Output del terminale in streaming da <span class="font-mono text-fg">/api/output</span></p>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Output delle scansioni e dei probe in streaming.</p>
         <div class="card flex flex-col" style="height: calc(100vh - 220px); min-height: 420px;">
           <div class="px-5 py-3 border-b border-rule flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -577,1139 +551,678 @@
         </div>
       </section>
 
-      <!-- ===================== DRY-RUN ===================== -->
-      <section data-screen-label="04 Dry-Run" data-screen="dryrun" class="hidden rise">
-        <div class="flex" style="min-height: calc(100vh - 64px);">
-          <div class="flex-1 min-w-0 p-8">
-            <h1 class="text-[26px] font-semibold leading-tight">Dry-Run</h1>
-            <p class="text-fg-mute mt-1 mb-6 text-[14px]">Esegue il playbook in modalità <span class="font-mono">--check --diff</span>. Nessuna modifica viene applicata agli host.</p>
-
-            <div data-op-banner class="mb-4 max-w-[680px]"></div>
-
-            <div class="card p-6 mb-4 max-w-[680px]">
-              <label class="text-[12px] font-medium text-fg-mute">Host group (<span class="font-mono">--limit</span>)</label>
-              <select data-op-limit class="field mt-2"></select>
-              <p class="text-[11px] text-fg-dim mt-2">Vuoto = tutti gli host dell'inventory. Limita l'esecuzione a un singolo gruppo.</p>
-            </div>
-
-            <div class="card card-hover p-6 max-w-[680px] mb-4" style="border-color: rgba(63,184,122,.40); background: linear-gradient(135deg, rgba(63,184,122,.05), transparent 65%)">
-              <div class="flex items-start gap-4">
-                <div class="w-11 h-11 rounded-md flex items-center justify-center shrink-0" style="background:rgba(63,184,122,.10); border:1px solid rgba(63,184,122,.30)">
-                  <i data-lucide="flask-conical" class="w-5 h-5" style="color:#7dd9a4"></i>
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2 mb-1 flex-wrap">
-                    <div class="font-semibold text-[15px]">Dry-Run · playbook completo</div>
-                    <span class="badge badge-info"><span class="dot"></span>--check --diff</span>
-                  </div>
-                  <p class="text-[12.5px] text-fg-mute mt-1">Simula l'esecuzione del playbook del progetto attivo. Mostra i cambiamenti che <em>verrebbero</em> applicati, senza toccare gli host.</p>
-                  <button class="btn btn-primary w-full justify-center mt-4" data-op="dryrun"><i data-lucide="flask-conical" class="w-4 h-4"></i>Lancia Dry-Run</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="p-4 border border-rule rounded-md bg-ink-700 max-w-[680px]">
-              <div class="flex gap-3">
-                <i data-lucide="info" class="w-4 h-4 text-info shrink-0 mt-0.5"></i>
-                <div class="text-[12.5px] text-fg-mute">Usa il dry-run per validare variabili e inventory prima di un deploy reale. Alcuni task con <span class="font-mono">when</span> dinamici possono comportarsi diversamente in check mode.</div>
-              </div>
-            </div>
-            <a href="#/files" class="btn btn-ghost btn-sm mt-5"><i data-lucide="file-code-2" class="w-3.5 h-3.5"></i>Vedi i file del playbook</a>
+      <!-- ===================== TUTTI I CERTIFICATI ===================== -->
+      <section data-screen="certs" class="p-8 max-w-[1400px] hidden rise">
+        <div class="flex items-start justify-between mb-6 gap-4 flex-wrap">
+          <div>
+            <h1 class="text-[26px] font-semibold leading-tight">Tutti i certificati</h1>
+            <p class="text-fg-mute mt-1 text-[14px]">Ogni certificato trovato nei secret del cluster, con esposizione e stato.</p>
           </div>
-          <div class="resize-handle" title="Trascina per ridimensionare"></div>
-          <div data-term-slot class="shrink-0 bg-ink-900 sticky top-16 self-start" style="width:480px; height: calc(100vh - 64px);"></div>
+          <div class="flex items-center gap-2">
+            <select id="certs-filter-status" class="field !w-auto !h-9 !text-[12px]">
+              <option value="all">Tutti gli stati</option>
+              <option value="expired">Scaduti</option>
+              <option value="expiring">In scadenza 30g</option>
+              <option value="ok">OK</option>
+            </select>
+            <select id="certs-filter-expo" class="field !w-auto !h-9 !text-[12px]">
+              <option value="all">Tutte le esposizioni</option>
+              <option value="ingress">Ingress</option>
+              <option value="internal">Interno cluster</option>
+              <option value="ca">CA</option>
+            </select>
+            <input id="certs-filter-q" class="field !w-[200px] !h-9 !text-[12px]" placeholder="cerca CN/namespace/secret…" />
+          </div>
+        </div>
+
+        <div class="card">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Subject CN</th>
+                <th class="w-44">Namespace · Secret</th>
+                <th class="w-28">Esposizione</th>
+                <th class="w-32">Stato</th>
+                <th class="w-44">Issuer</th>
+                <th class="w-32">Scadenza</th>
+              </tr>
+            </thead>
+            <tbody id="certs-tbody"><tr><td colspan="6" class="text-center text-fg-mute py-10">Lancia una scansione per popolare la lista.</td></tr></tbody>
+          </table>
         </div>
       </section>
 
-      <!-- ===================== DEPLOY ===================== -->
-      <section data-screen-label="05 Deploy" data-screen="deploy" class="hidden rise">
-        <div class="flex" style="min-height: calc(100vh - 64px);">
-          <div class="flex-1 min-w-0 p-8">
-            <h1 class="text-[26px] font-semibold leading-tight">Deploy</h1>
-            <p class="text-fg-mute mt-1 mb-6 text-[14px]">Applica il playbook del progetto attivo agli host reali. <span class="text-warn">Le modifiche sono reali.</span></p>
+      <!-- ===================== CA & CATENA ===================== -->
+      <section data-screen="ca" class="p-8 max-w-[1100px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">CA &amp; Catena</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Quale CA emette i tuoi certificati, qual e' il checksum pubblicato da Rancher, dove non corrisponde.</p>
+        <div id="ca-body"><div class="card p-6 text-fg-mute text-[13px]">Lancia una scansione per analizzare la CA.</div></div>
+      </section>
 
-            <div data-op-banner class="mb-4 max-w-[680px]"></div>
-
-            <div class="card p-6 mb-4 max-w-[680px]">
-              <label class="text-[12px] font-medium text-fg-mute">Host group (<span class="font-mono">--limit</span>)</label>
-              <select data-op-limit class="field mt-2"></select>
-              <div class="hairline my-5"></div>
-              <div class="flex items-center gap-3 text-[12px] text-fg-mute">
-                <i data-lucide="shield-alert" class="w-4 h-4 text-warn"></i>
-                Questa azione esegue il playbook contro gli host di produzione.
-              </div>
-            </div>
-
-            <div class="card card-hover p-6 max-w-[680px] mb-4" style="border-color: rgba(232,168,56,.40); background: linear-gradient(135deg, rgba(232,168,56,.05), transparent 65%)">
-              <div class="flex items-start gap-4">
-                <div class="w-11 h-11 rounded-md flex items-center justify-center shrink-0" style="background:rgba(232,168,56,.10); border:1px solid rgba(232,168,56,.30)">
-                  <i data-lucide="rocket" class="w-5 h-5" style="color:#e8a838"></i>
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2 mb-1 flex-wrap">
-                    <div class="font-semibold text-[15px]">Deploy · playbook completo</div>
-                    <span class="badge badge-run"><span class="dot"></span>ansible-playbook</span>
-                  </div>
-                  <p class="text-[12.5px] text-fg-mute mt-1">Esegue il playbook del progetto attivo applicando le modifiche agli host selezionati.</p>
-                  <button class="btn btn-primary w-full justify-center mt-4" data-op="deploy"><i data-lucide="rocket" class="w-4 h-4"></i>Esegui Deploy</button>
-                </div>
-              </div>
-            </div>
-            <a href="#/files" class="btn btn-ghost btn-sm mt-1"><i data-lucide="file-code-2" class="w-3.5 h-3.5"></i>Vedi i file del playbook</a>
-          </div>
-          <div class="resize-handle" title="Trascina per ridimensionare"></div>
-          <div data-term-slot class="shrink-0 bg-ink-900 sticky top-16 self-start" style="width:480px; height: calc(100vh - 64px);"></div>
+      <!-- ===================== INGRESS & SPARSI ===================== -->
+      <section data-screen="ingress" class="p-8 max-w-[1400px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">Ingress &amp; sparsi</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Ingress con TLS e secret TLS non referenziati: spesso "cert sparsi" su servizi esposti.</p>
+        <div class="card mb-6">
+          <div class="px-6 py-4 border-b border-rule"><h2 class="text-[15px] font-semibold">Ingress con TLS</h2></div>
+          <table class="tbl">
+            <thead><tr>
+              <th class="w-44">Namespace · Ingress</th>
+              <th class="w-32">Class</th>
+              <th>Host</th>
+              <th class="w-44">Secret TLS</th>
+            </tr></thead>
+            <tbody id="ingress-tbody"><tr><td colspan="4" class="text-center text-fg-mute py-10">Nessuna scansione.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="px-6 py-4 border-b border-rule"><h2 class="text-[15px] font-semibold">Secret TLS sparsi (non referenziati da Ingress)</h2></div>
+          <div id="orphans-body" class="p-4 text-[12px] text-fg-mute">—</div>
         </div>
       </section>
 
-      <!-- ===================== CONTROLLI ===================== -->
-      <section data-screen-label="06 Controlli" data-screen="checks" class="hidden rise">
-        <div class="flex" style="min-height: calc(100vh - 64px);">
-          <div class="flex-1 min-w-0 p-8">
-            <h1 class="text-[26px] font-semibold leading-tight">Controlli</h1>
-            <p class="text-fg-mute mt-1 mb-6 text-[14px]">Verifiche rapide e non distruttive sul progetto attivo: syntax-check, lista task/host e ping di connettività.</p>
-
-            <div data-op-banner class="mb-4 max-w-[680px]"></div>
-
-            <div class="card p-6 mb-4 max-w-[680px]">
-              <label class="text-[12px] font-medium text-fg-mute">Host group (per Ping / List, <span class="font-mono">--limit</span>)</label>
-              <select data-op-limit class="field mt-2"></select>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4 max-w-[680px]">
-              <div class="card card-hover p-5">
-                <div class="flex items-center gap-3 mb-2"><span class="badge badge-info"><span class="dot"></span>--syntax-check</span></div>
-                <div class="font-medium text-[14px] mb-1">Syntax check</div>
-                <p class="text-[12px] text-fg-mute mb-4">Verifica che il playbook sia sintatticamente valido, senza eseguirlo.</p>
-                <button class="btn btn-primary w-full justify-center" data-op="syntax"><i data-lucide="shield-check" class="w-4 h-4"></i>Verifica sintassi</button>
-              </div>
-              <div class="card card-hover p-5">
-                <div class="flex items-center gap-3 mb-2"><span class="badge badge-info"><span class="dot"></span>-m ping</span></div>
-                <div class="font-medium text-[14px] mb-1">Ping host</div>
-                <p class="text-[12px] text-fg-mute mb-4">Controlla la raggiungibilità SSH degli host dell'inventory.</p>
-                <button class="btn btn-primary w-full justify-center" data-op="ping"><i data-lucide="radio" class="w-4 h-4"></i>Esegui ping</button>
-              </div>
-              <div class="card card-hover p-5">
-                <div class="flex items-center gap-3 mb-2"><span class="badge badge-info"><span class="dot"></span>--list-tasks</span></div>
-                <div class="font-medium text-[14px] mb-1">Lista task</div>
-                <p class="text-[12px] text-fg-mute mb-4">Elenca i task che verrebbero eseguiti dal playbook.</p>
-                <button class="btn btn-primary w-full justify-center" data-op="list_tasks"><i data-lucide="list-checks" class="w-4 h-4"></i>Lista task</button>
-              </div>
-              <div class="card card-hover p-5">
-                <div class="flex items-center gap-3 mb-2"><span class="badge badge-info"><span class="dot"></span>--list-hosts</span></div>
-                <div class="font-medium text-[14px] mb-1">Lista host</div>
-                <p class="text-[12px] text-fg-mute mb-4">Mostra su quali host verrebbe eseguito il playbook.</p>
-                <button class="btn btn-primary w-full justify-center" data-op="list_hosts"><i data-lucide="server" class="w-4 h-4"></i>Lista host</button>
-              </div>
-            </div>
-          </div>
-          <div class="resize-handle" title="Trascina per ridimensionare"></div>
-          <div data-term-slot class="shrink-0 bg-ink-900 sticky top-16 self-start" style="width:480px; height: calc(100vh - 64px);"></div>
-        </div>
+      <!-- ===================== ANOMALIE & FIX ===================== -->
+      <section data-screen="findings" class="p-8 max-w-[1100px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">Anomalie &amp; fix</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Per ogni anomalia: dettaglio, su quale VM agire, e i comandi consigliati.</p>
+        <div id="findings-body"><div class="card p-6 text-fg-mute text-[13px]">Lancia una scansione per analizzare gli alert.</div></div>
       </section>
 
-      <!-- ===================== INVENTORY ===================== -->
-      <section data-screen-label="07 Inventory" data-screen="inventory" class="p-8 max-w-[1100px] hidden rise">
-        <h1 class="text-[26px] font-semibold leading-tight">Inventory</h1>
-        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Gruppi e host del progetto attivo, letti dal file <span class="font-mono text-fg">inventory</span> nel repo.</p>
-        <div data-op-banner class="mb-6 max-w-[760px]" id="inventory-banner"></div>
-        <div id="inventory-body" class="max-w-[760px]"></div>
-      </section>
-
-      <!-- ===================== FILE ===================== -->
-      <section data-screen-label="08 File" data-screen="files" class="p-8 max-w-[1400px] hidden rise">
-        <h1 class="text-[26px] font-semibold leading-tight">File</h1>
-        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Sfoglia playbook, inventory, group_vars e roles del progetto attivo.</p>
-        <div data-op-banner class="mb-6 max-w-[760px]" id="files-banner"></div>
-        <div class="card flex overflow-hidden" style="height: calc(100vh - 320px); min-height: 380px;">
-          <div class="w-64 shrink-0 border-r border-rule overflow-auto bg-ink-900" id="files-list">
-            <div class="p-3 text-[12px] text-fg-mute">Caricamento…</div>
+      <!-- ===================== PROBE TLS ===================== -->
+      <section data-screen="probe" class="p-8 max-w-[1100px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">Probe TLS esterno</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Apre un handshake TLS senza validare la catena e ti mostra il certificato effettivamente servito dall'endpoint (es. l'nginx davanti a Rancher). Utile per confrontare il cert servito esternamente con quello presente nei secret del cluster.</p>
+        <div class="card p-6 mb-4 max-w-[760px]">
+          <div class="grid grid-cols-3 gap-3">
+            <div class="col-span-2"><label class="text-[12px] font-medium text-fg-mute">Host</label><input id="probe-host" class="field mt-2" placeholder="rancher.iac-svil.example.com" /></div>
+            <div><label class="text-[12px] font-medium text-fg-mute">Porta</label><input id="probe-port" class="field mt-2" value="443" /></div>
           </div>
-          <div class="flex-1 min-w-0 flex flex-col">
-            <div class="px-4 py-2 border-b border-rule flex items-center justify-between bg-ink-900 shrink-0">
-              <span class="text-[11px] font-mono text-fg-mute" id="files-path"></span>
-              <button class="btn btn-ghost btn-sm" id="files-copy"><i data-lucide="copy" class="w-3.5 h-3.5"></i>Copia</button>
-            </div>
-            <pre id="files-content" class="text-[12.5px] leading-relaxed p-5 m-0 font-mono overflow-auto whitespace-pre flex-1 min-h-0" style="color:#cdd6df;"><span class="hl-cmt">Seleziona un file dalla lista</span></pre>
-          </div>
+          <div class="mt-3"><label class="text-[12px] font-medium text-fg-mute">SNI (opzionale)</label><input id="probe-sni" class="field mt-2" placeholder="default = host" /></div>
+          <div class="hairline my-5"></div>
+          <button id="btn-probe" class="btn btn-primary"><i data-lucide="radio" class="w-4 h-4"></i>Esegui probe</button>
         </div>
+        <div id="probe-result" class="max-w-[760px]"></div>
       </section>
 
       <!-- ===================== HOW-TO ===================== -->
-      <section data-screen-label="09 How-To" data-screen="howto" class="p-8 max-w-[960px] hidden rise">
-        <div class="flex items-start justify-between mb-6 gap-4">
-          <div>
-            <h1 class="text-[26px] font-semibold leading-tight">HOW-TO</h1>
-            <p class="text-fg-mute mt-1 text-[14px]">Come usare la dashboard: avvio, clonazione dei repo, dry-run e deploy.</p>
-          </div>
-        </div>
-        <div class="card p-7" id="howto-body">
-          <div class="text-fg-mute text-[13px]">Caricamento HOW-TO…</div>
-        </div>
+      <section data-screen="howto" class="p-8 max-w-[960px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">HOW-TO</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Avvio, scansioni, lettura dei report.</p>
+        <div class="card p-7" id="howto-body"><div class="text-fg-mute text-[13px]">Caricamento HOW-TO…</div></div>
       </section>
 
     </div>
   </main>
 </div>
 
-<!-- ============== SHARED TERMINAL TEMPLATE ============== -->
-<template id="tpl-terminal-panel">
-  <div class="flex flex-col h-full">
-    <div class="px-5 py-3 border-b border-rule flex items-center justify-between">
-      <div class="flex items-center gap-2.5">
-        <div class="flex items-center gap-1.5">
-          <span class="w-2.5 h-2.5 rounded-full" style="background:#e25555"></span>
-          <span class="w-2.5 h-2.5 rounded-full" style="background:#e8a838"></span>
-          <span class="w-2.5 h-2.5 rounded-full" style="background:#3fb87a"></span>
-        </div>
-        <span class="text-[12px] text-fg-mute font-mono ml-2 pane-title">ansible · live</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="badge term-status"><span class="dot"></span><span class="t">idle</span></span>
-        <button class="icon-btn !w-7 !h-7" data-clear-term title="Pulisci"><i data-lucide="eraser" class="w-3.5 h-3.5"></i></button>
-        <button class="icon-btn !w-7 !h-7" data-copy-term title="Copia"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
-      </div>
+<!-- ============== DETTAGLIO CERT MODAL ============== -->
+<div id="cert-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(7,10,15,.88); backdrop-filter:blur(6px)">
+  <div class="card flex flex-col" style="width:min(840px,95vw); max-height:88vh;">
+    <div class="px-5 py-3 border-b border-rule flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-2.5"><i data-lucide="file-key" class="w-4 h-4 text-brand"></i><span class="font-medium text-[14px]" id="cm-title">Certificato</span></div>
+      <button class="icon-btn" id="cm-close"><i data-lucide="x" class="w-4 h-4"></i></button>
     </div>
-    <div class="px-5 py-2 border-b border-rule text-[11px] text-fg-mute font-mono flex items-center justify-between">
-      <span class="term-lines">0 lines</span>
-      <span class="term-action">—</span>
-    </div>
-    <div class="term flex-1 min-h-0 !border-0 !rounded-none !bg-ink-900">
-      <div class="term-body term-out"></div>
-    </div>
+    <div class="flex-1 overflow-auto p-5 text-[12.5px]" id="cm-body"></div>
   </div>
-</template>
+</div>
 
 <script>
 /* ============================================================
-   STATO + COSTANTI
+   STATO + UTILS
    ============================================================ */
 const API = '';
-const HISTORY_KEY = 'ansible-job-history';
-const ACTIVE_KEY  = 'ansible-active-project';
-
-let PROJECTS = [];
-let PROJECTS_BY_KEY = {};
-let activeKey = localStorage.getItem(ACTIVE_KEY) || null;
-
 const $  = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
 const state = {
   lastSeenLines: 0,
   status: 'idle',
-  currentJobId: null,
-  currentAction: null,
-  jobStartTime: null,
+  contexts: [],
+  ctx: null,                       // context attivo
+  scan: null,                      // ultimo /api/last-scan
+  filters: { status:'all', expo:'all', q:'' },
   lines: [],
-  jobs: [],
-  termInstances: [],
-  notifCleared: 0,
 };
-let _timerInterval = null;
 
-/* ============================================================
-   LABEL AZIONI (action = "<op>:<projectKey>")
-   ============================================================ */
-const OP_NAME = {
-  deploy:'Deploy', dryrun:'Dry-Run', syntax:'Syntax check',
-  list_tasks:'List tasks', list_hosts:'List hosts', ping:'Ping', clone:'Clone/Pull',
-};
-function actionLabel(action) {
-  const [op, key] = String(action || '').split(':');
-  const p = PROJECTS_BY_KEY[key];
-  const opName = OP_NAME[op] || op;
-  return { name: `${opName}${p ? ' · ' + p.name : (key ? ' · ' + key : '')}`, type: opName };
+function _esc(s) {
+  return (s == null ? '' : String(s))
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function escapeHTML(s){return s.replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+
+/* ANSI minimal parser (riusato dal design Polaris) */
+const ANSI_FG = { 30:'a-blk',31:'a-red',32:'a-grn',33:'a-ylw',34:'a-blu',35:'a-mag',36:'a-cyn',37:'a-wht',
+                  90:'a-blk',91:'a-red',92:'a-grn',93:'a-ylw',94:'a-blu',95:'a-mag',96:'a-cyn',97:'a-wht' };
+function ansiToHTML(line) {
+  const re = /\x1b\[([\d;]*)m/g; let out = '', last = 0, classes = [], m;
+  while ((m = re.exec(line)) !== null) {
+    out += wrapText(line.slice(last, m.index), classes);
+    const codes = (m[1] || '0').split(';').map(c=>parseInt(c,10)||0);
+    for (const c of codes) {
+      if (c === 0) classes = [];
+      else if (c === 1) { if(!classes.includes('a-bld')) classes.push('a-bld'); }
+      else if (c === 2) { if(!classes.includes('a-dim')) classes.push('a-dim'); }
+      else if (ANSI_FG[c]) { classes = classes.filter(x => !x.startsWith('a-') || x==='a-bld'||x==='a-dim'); classes.push(ANSI_FG[c]); }
+    }
+    last = re.lastIndex;
+  }
+  out += wrapText(line.slice(last), classes); return out;
+}
+function wrapText(text, classes) {
+  if (!text) return ''; const esc = escapeHTML(text);
+  return classes.length ? `<span class="${classes.join(' ')}">${esc}</span>` : esc;
 }
 
 /* ============================================================
    ROUTING
    ============================================================ */
 const ROUTE_TITLES = {
-  dashboard:'Dashboard', projects:'Progetti', activity:'Activity Log',
-  dryrun:'Dry-Run', deploy:'Deploy', checks:'Controlli',
-  inventory:'Inventory', files:'File', howto:'HOW-TO',
+  dashboard:'Dashboard', cluster:'Cluster', activity:'Activity Log',
+  certs:'Certificati', ca:'CA & Catena', ingress:'Ingress & sparsi',
+  findings:'Anomalie & fix', probe:'Probe TLS', howto:'HOW-TO',
 };
 const ROUTE_PARENT = {
-  dashboard:'Overview', projects:'Overview', activity:'Overview',
-  dryrun:'Operations', deploy:'Operations', checks:'Operations',
-  inventory:'Resources', files:'Resources', howto:'Documentation',
+  dashboard:'Overview', cluster:'Overview', activity:'Overview',
+  certs:'Certificates', ca:'Certificates', ingress:'Certificates',
+  findings:'Diagnostica', probe:'Diagnostica', howto:'Documentation',
 };
-function currentRoute() {
-  const h = (location.hash || '#/dashboard').replace('#/', '');
-  return ROUTE_TITLES[h] ? h : 'dashboard';
-}
+function currentRoute(){ const h = (location.hash || '#/dashboard').replace('#/',''); return ROUTE_TITLES[h]?h:'dashboard'; }
 function route() {
-  const key = currentRoute();
+  const k = currentRoute();
   $$('section[data-screen]').forEach(s => {
-    s.classList.toggle('hidden', s.dataset.screen !== key);
-    if (s.dataset.screen === key) { s.classList.remove('rise'); void s.offsetWidth; s.classList.add('rise'); }
+    s.classList.toggle('hidden', s.dataset.screen !== k);
+    if (s.dataset.screen === k) { s.classList.remove('rise'); void s.offsetWidth; s.classList.add('rise'); }
   });
-  $$('.nav-item').forEach(a => {
-    if (a.dataset.route === key) a.setAttribute('aria-current','page');
-    else a.removeAttribute('aria-current');
-  });
-  $('#breadcrumb').innerHTML = `
-    <span class="text-fg-mute">${ROUTE_PARENT[key]}</span>
-    <span class="crumb-sep"></span>
-    <span class="text-fg">${ROUTE_TITLES[key]}</span>`;
-  if (['dryrun','deploy','checks'].includes(key)) mountSideTerminals(key);
-  rerenderScreen(key);
-  window.scrollTo({ top: 0 });
+  $$('.nav-item').forEach(a => { if (a.dataset.route === k) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+  $('#breadcrumb').innerHTML = `<span class="text-fg-mute">${ROUTE_PARENT[k]}</span><span class="crumb-sep"></span><span class="text-fg">${ROUTE_TITLES[k]}</span>`;
+  rerender(k);
+  window.scrollTo({top:0});
 }
 window.addEventListener('hashchange', route);
-
-function rerenderScreen(k) {
+function rerender(k) {
   if (k === 'dashboard') renderDashboard();
-  else if (k === 'projects') renderProjects();
-  else if (k === 'activity') refreshAllTerminals();
-  else if (['dryrun','deploy','checks'].includes(k)) renderOpScreen(k);
-  else if (k === 'inventory') renderInventory();
-  else if (k === 'files') renderFiles();
-  else if (k === 'howto') renderHowTo();
+  else if (k === 'cluster')  renderClusterScreen();
+  else if (k === 'certs')    renderCertsTable();
+  else if (k === 'ca')       renderCaScreen();
+  else if (k === 'ingress')  renderIngressScreen();
+  else if (k === 'findings') renderFindingsScreen();
+  else if (k === 'probe')    {/* la form e' statica */}
+  else if (k === 'howto')    renderHowTo();
+  else if (k === 'activity') refreshActivity();
 }
 
 /* ============================================================
-   ANSI PARSER (subset)
+   ACTIVITY TERMINAL
    ============================================================ */
-const ANSI_FG = { 30:'a-blk',31:'a-red',32:'a-grn',33:'a-ylw',34:'a-blu',35:'a-mag',36:'a-cyn',37:'a-wht',
-                  90:'a-blk',91:'a-red',92:'a-grn',93:'a-ylw',94:'a-blu',95:'a-mag',96:'a-cyn',97:'a-wht' };
-function escapeHTML(s){return s.replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function ansiToHTML(line) {
-  const re = /\x1b\[([\d;]*)m/g;
-  let out = '', last = 0, classes = [], m;
-  while ((m = re.exec(line)) !== null) {
-    out += wrapText(line.slice(last, m.index), classes);
-    const codes = (m[1] || '0').split(';').map(c=>parseInt(c,10)||0);
-    for (const c of codes) {
-      if (c === 0) { classes = []; }
-      else if (c === 1) { if(!classes.includes('a-bld')) classes.push('a-bld'); }
-      else if (c === 2) { if(!classes.includes('a-dim')) classes.push('a-dim'); }
-      else if (c === 4) { if(!classes.includes('a-und')) classes.push('a-und'); }
-      else if (ANSI_FG[c]) {
-        classes = classes.filter(x => !x.startsWith('a-') || x==='a-bld'||x==='a-dim'||x==='a-und');
-        classes.push(ANSI_FG[c]);
-      }
-    }
-    last = re.lastIndex;
-  }
-  out += wrapText(line.slice(last), classes);
-  return out;
-}
-function wrapText(text, classes) {
-  if (!text) return '';
-  const esc = escapeHTML(text);
-  return classes.length ? `<span class="${classes.join(' ')}">${esc}</span>` : esc;
-}
-function _esc(s) {
-  return (s == null ? '' : String(s))
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
-/* ============================================================
-   TERMINAL PANELS
-   ============================================================ */
-function mountSideTerminals(screenKey) {
-  const screen = $(`section[data-screen="${screenKey}"]`);
-  if (!screen) return;
-  const slot = screen.querySelector('[data-term-slot]');
-  if (!slot || slot.dataset.mounted) return;
-  slot.dataset.mounted = '1';
-  const tpl = $('#tpl-terminal-panel');
-  const node = tpl.content.firstElementChild.cloneNode(true);
-  node.style.height = '100%';
-  slot.appendChild(node);
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
-  state.termInstances.push({
-    out: node.querySelector('.term-out'),
-    status: node.querySelector('.term-status'),
-    lines: node.querySelector('.term-lines'),
-    action: node.querySelector('.term-action'),
-    container: node,
-  });
-  refreshAllTerminals();
-}
 function pushTerminalLines(newLines) {
   if (!newLines.length) return;
   state.lines.push(...newLines);
   const html = newLines.map(l => `<div>${ansiToHTML(l)}</div>`).join('');
-  state.termInstances.forEach(t => {
-    t.out.insertAdjacentHTML('beforeend', html);
-    t.lines.textContent = `${state.lines.length} lines`;
-    t.out.scrollTop = t.out.scrollHeight;
-  });
   const act = $('#act-term');
-  if (act) {
-    act.insertAdjacentHTML('beforeend', html);
-    $('#act-lines').textContent = `${state.lines.length} lines`;
-    act.scrollTop = act.scrollHeight;
-  }
+  if (act) { act.insertAdjacentHTML('beforeend', html); $('#act-lines').textContent = `${state.lines.length} lines`; act.scrollTop = act.scrollHeight; }
 }
-function refreshAllTerminals() {
-  const html = state.lines.map(l => `<div>${ansiToHTML(l)}</div>`).join('');
-  state.termInstances.forEach(t => {
-    t.out.innerHTML = html;
-    t.lines.textContent = `${state.lines.length} lines`;
-    t.out.scrollTop = t.out.scrollHeight;
-  });
-  const act = $('#act-term');
-  if (act) {
-    act.innerHTML = html;
-    $('#act-lines').textContent = `${state.lines.length} lines`;
-    act.scrollTop = act.scrollHeight;
-  }
+function refreshActivity() {
+  const act = $('#act-term'); if (!act) return;
+  act.innerHTML = state.lines.map(l => `<div>${ansiToHTML(l)}</div>`).join('');
+  $('#act-lines').textContent = `${state.lines.length} lines`;
+  act.scrollTop = act.scrollHeight;
 }
-function clearTerminals() { state.lines = []; refreshAllTerminals(); }
-function copyTerminal(btn) { navigator.clipboard.writeText(state.lines.join('\n')).then(()=> flashCopy(btn)); }
-
-function setRunningStatus(status, action) {
+function setStatus(status) {
   state.status = status;
-  if (action) state.currentAction = action;
-  const map = { idle:['badge-pend','idle'], running:['badge-run','running'],
-                success:['badge-ok','success'], failed:['badge-bad','failed'] };
+  const map = { idle:['badge-pend','idle'], running:['badge-run','running'], success:['badge-ok','success'], failed:['badge-bad','failed'] };
   const [cls, label] = map[status] || map.idle;
-  state.termInstances.forEach(t => {
-    t.status.className = 'badge ' + cls + (status==='running' ? ' pulse' : '');
-    t.status.querySelector('.t').textContent = label;
-  });
-  const a = $('#act-status');
-  if (a) { a.className = 'badge ' + cls + (status==='running' ? ' pulse' : ''); a.querySelector('.t').textContent = label; }
-  updateLastOpCard(status, action || state.currentAction);
-  if (status === 'running' && action) {
-    const name = actionLabel(action).name;
-    state.termInstances.forEach(t => { t.action.textContent = `${name} · 0s`; });
-    startTimer(action);
-  } else if (status === 'success' || status === 'failed') {
-    stopTimer(state.currentAction);
-  } else if (status === 'idle') {
-    stopTimer(null); state.currentAction = null;
-    state.termInstances.forEach(t => { t.action.textContent = '—'; });
-  }
+  const a = $('#act-status'); if (a) { a.className = 'badge ' + cls + (status==='running'?' pulse':''); a.querySelector('.t').textContent = label; }
+  const btn = $('#btn-scan'); if (btn) btn.disabled = (status === 'running');
 }
-function updateLastOpCard(status, action) {
-  const colors = { idle:'#6a7280', running:'#e8a838', success:'#3fb87a', failed:'#e25555' };
-  const labels = { idle:'IDLE', running:'RUNNING', success:'SUCCESS', failed:'FAILED' };
-  const ring = $('#last-op-ring'), center = $('#last-op-center');
-  if (ring) {
-    ring.style.setProperty('--ring-color', colors[status]);
-    ring.style.setProperty('--ring-val', 100);
-    center.innerHTML = `<div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">JOB</div>
-      <div class="text-[12.5px] font-bold leading-none" style="color:${colors[status]}">${labels[status]}</div>`;
-  }
-  if (action) {
-    const n = $('#last-op-name'); if (n) n.textContent = actionLabel(action).name;
-    const t = $('#last-op-time'); if (t) t.textContent = status === 'running' ? 'in corso…' : 'poco fa';
-  }
-}
+$('[data-clear-term]')?.addEventListener('click', () => { state.lines = []; refreshActivity(); });
+$('[data-copy-term]')?.addEventListener('click', e => { navigator.clipboard.writeText(state.lines.join('\n')).then(()=> flashCopy(e.currentTarget)); });
 
 /* ============================================================
-   JOB HISTORY
+   FETCH HELPERS + POLLING OUTPUT
    ============================================================ */
-function loadJobs() { try { state.jobs = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { state.jobs = []; } }
-function saveJobs() { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.jobs)); }
-function nextJobId() {
-  const n = (state.jobs.reduce((m,j)=> Math.max(m, parseInt(j.id.replace(/\D/g,'')||0)), 1000)) + 1;
-  return '#'+ n;
-}
-function fmtRel(ts) {
-  if (!ts) return '—';
-  const d = (Date.now() - ts)/1000;
-  if (d < 60) return `${Math.max(1,Math.floor(d))}s fa`;
-  if (d < 3600) return `${Math.floor(d/60)}m fa`;
-  if (d < 86400) return `${Math.floor(d/3600)}h fa`;
-  return `${Math.floor(d/86400)}g fa`;
-}
-function fmtElapsed(ms) {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${(s % 60).toString().padStart(2,'0')}s`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${(m % 60).toString().padStart(2,'0')}m ${(s % 60).toString().padStart(2,'0')}s`;
-}
-function startTimer(action) {
-  state.jobStartTime = Date.now();
-  if (_timerInterval) clearInterval(_timerInterval);
-  const name = actionLabel(action).name;
-  _timerInterval = setInterval(() => {
-    const elapsed = fmtElapsed(Date.now() - state.jobStartTime);
-    state.termInstances.forEach(t => { t.action.textContent = `${name} · ${elapsed}`; });
-    const opTime = $('#last-op-time');
-    if (opTime && state.status === 'running') opTime.textContent = `in corso · ${elapsed}`;
-  }, 1000);
-}
-function stopTimer(action) {
-  if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
-  if (state.jobStartTime && action) {
-    const elapsed = fmtElapsed(Date.now() - state.jobStartTime);
-    const name = actionLabel(action).name;
-    state.termInstances.forEach(t => { t.action.textContent = `${name} · ${elapsed}`; });
-  }
-  state.jobStartTime = null;
-}
-function renderJobs() {
-  const tbody = $('#jobs-tbody');
-  if (!tbody) return;
-  const sample = state.jobs;
-  const view = sample.slice().reverse().slice(0, 8);
-  const chartCard = $('#activity-chart-card');
-  if (chartCard) chartCard.classList.toggle('hidden', sample.length === 0);
-  tbody.innerHTML = view.map(j => {
-    const l = actionLabel(j.action);
-    const badge = { running:'badge-run', success:'badge-ok', failed:'badge-bad', pending:'badge-pend' }[j.status] || 'badge-pend';
-    const label = { running:'In corso', success:'Successo', failed:'Fallito', pending:'In attesa' }[j.status] || j.status;
-    const durStr = (j.startedAt && j.finishedAt) ? ` <span class="text-fg-dim">·</span> ${fmtElapsed(j.finishedAt - j.startedAt)}` : '';
-    const finCell = j.status === 'running' ? 'in corso…' : `${fmtRel(j.finishedAt)}${durStr}`;
-    return `<tr>
-      <td class="font-mono text-fg-mute">${j.id}</td>
-      <td><div class="font-medium text-fg">${_esc(l.name)}</div>
-          <div class="text-[11px] text-fg-dim font-mono">${_esc(j.action)}</div></td>
-      <td><span class="badge ${badge} ${j.status==='running'?'pulse':''}"><span class="dot"></span>${label}</span></td>
-      <td class="text-fg-mute">${_esc(l.type)}</td>
-      <td class="text-fg-mute">${finCell}</td>
-      <td><button class="icon-btn !w-7 !h-7" data-remove-job="${j.id}" title="Rimuovi"><i data-lucide="x" class="w-4 h-4"></i></button></td>
-    </tr>`;
-  }).join('');
-  $('#jobs-empty').classList.toggle('hidden', view.length > 0);
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
-  drawActivityChart(sample);
-  renderNotifications(sample);
-}
-function pushJob(action) {
-  const job = { id: nextJobId(), action, status:'running', startedAt: Date.now(), finishedAt: null };
-  state.jobs.push(job);
-  state.currentJobId = job.id;
-  saveJobs(); renderJobs();
-  return job;
-}
-function finishCurrentJob(status) {
-  const j = state.jobs.find(x => x.id === state.currentJobId);
-  if (!j) return;
-  j.status = status; j.finishedAt = Date.now();
-  saveJobs(); renderJobs();
-}
-
-/* ============================================================
-   CHART
-   ============================================================ */
-let chart;
-const chartFilters = { range: 'month', type: 'all' };
-function drawActivityChart(jobs) {
-  const ctx = $('#activityChart');
-  if (!ctx || ctx.offsetParent === null) return;
-  const RANGES = {
-    month: { count: 30, unitMs: 86400000, fmt: d => d.toLocaleDateString(undefined, {month:'short', day:'numeric'}) },
-    week:  { count: 7,  unitMs: 86400000, fmt: d => d.toLocaleDateString(undefined, {weekday:'short'}) },
-    day:   { count: 24, unitMs: 3600000,  fmt: d => String(d.getHours()).padStart(2,'0') + ':00' },
-  };
-  const R = RANGES[chartFilters.range] || RANGES.month;
-  const typeF = chartFilters.type;
-  const src = (typeF === 'all') ? jobs : jobs.filter(j => actionLabel(j.action).type === typeF);
-  const buckets = Array.from({length: R.count}, () => ({s:0, f:0}));
-  const now = Date.now();
-  src.forEach(j => {
-    if (!j.finishedAt) return;
-    const offset = Math.floor((now - j.finishedAt) / R.unitMs);
-    if (offset >= 0 && offset < R.count) {
-      if (j.status === 'success') buckets[R.count-1-offset].s++;
-      else if (j.status === 'failed') buckets[R.count-1-offset].f++;
-    }
-  });
-  const labels = buckets.map((_, i) => R.fmt(new Date(now - (R.count-1-i)*R.unitMs)));
-  const data = { labels, datasets: [
-    { label:'Successo', data: buckets.map(b=>b.s), borderColor:'#3fb87a', backgroundColor:'rgba(63,184,122,0.22)', fill:true, tension:0.35, pointRadius:0, borderWidth:1.5 },
-    { label:'Fallito',  data: buckets.map(b=>b.f), borderColor:'#e25555', backgroundColor:'rgba(226,85,85,0.20)', fill:true, tension:0.35, pointRadius:0, borderWidth:1.5 },
-  ]};
-  if (chart) chart.destroy();
-  chart = new Chart(ctx, { type:'line', data, options: {
-    responsive:true, maintainAspectRatio:false, animation:{duration:600},
-    interaction: { mode:'index', intersect:false },
-    plugins: {
-      legend: { display:true, position:'top', align:'end', labels: { color:'#8b96a3', boxWidth:8, boxHeight:8, font:{family:'Space Grotesk', size:11} } },
-      tooltip: { backgroundColor:'#0a0e14', borderColor:'#2a3441', borderWidth:1, titleColor:'#e6edf3', bodyColor:'#a1a1aa', titleFont:{family:'Space Grotesk', size:12}, bodyFont:{family:'Space Grotesk', size:12} },
-    },
-    scales: {
-      x: { grid:{color:'rgba(255,255,255,0.04)', drawBorder:false}, ticks:{color:'#5d6773', font:{family:'JetBrains Mono', size:10}, maxRotation:0, autoSkipPadding:24} },
-      y: { grid:{color:'rgba(255,255,255,0.04)', drawBorder:false}, beginAtZero:true, ticks:{color:'#5d6773', font:{family:'JetBrains Mono', size:10}, precision:0} },
-    }
-  }});
-}
-
-/* ============================================================
-   PROGETTI: load / select / render
-   ============================================================ */
-function getActiveProject() { return PROJECTS.find(p => p.key === activeKey) || null; }
-
-async function loadProjects() {
+async function loadContexts() {
   try {
-    const r = await fetch(`${API}/api/projects`, { cache:'no-store' });
+    const r = await fetch(`${API}/api/contexts`, { cache:'no-store' });
     const j = await r.json();
-    PROJECTS = j.projects || [];
-    const pd = $('#settings-projectsdir'); if (pd && j.projectsDir) pd.textContent = j.projectsDir;
-  } catch (e) { /* backend offline */ }
-  PROJECTS_BY_KEY = Object.fromEntries(PROJECTS.map(p => [p.key, p]));
-  if ((!activeKey || !PROJECTS_BY_KEY[activeKey]) && PROJECTS.length) activeKey = PROJECTS[0].key;
-  populateProjectSelect();
-  rerenderScreen(currentRoute());
+    state.contexts = j.contexts || [];
+    if (!state.ctx) state.ctx = j.current || (state.contexts[0] || null);
+    $('#settings-kubectl').textContent = j.kubectl || 'non trovato';
+    $('#settings-openssl').textContent = j.openssl || 'non trovato';
+    $('#settings-crypto').textContent = j.cryptography ? 'present' : 'fallback openssl';
+    populateCtxSelects();
+  } catch {}
 }
-function populateProjectSelect() {
-  const sel = $('#project-select');
-  if (!sel) return;
-  sel.innerHTML = PROJECTS.map(p => `<option value="${p.key}">${_esc(p.name)}${p.cloned ? '' : ' (non clonato)'}</option>`).join('');
-  if (activeKey) sel.value = activeKey;
-}
-function setActive(key) {
-  if (!PROJECTS_BY_KEY[key]) { activeKey = key; }
-  else activeKey = key;
-  localStorage.setItem(ACTIVE_KEY, key);
-  populateProjectSelect();
-  rerenderScreen(currentRoute());
-}
-
-function projectBannerHTML(p) {
-  if (!p) return `<div class="card p-5"><div class="text-[13px] text-fg-mute">Nessun progetto selezionato. Vai su <a href="#/projects" class="text-brand hover:text-brand-hi">Progetti</a>.</div></div>`;
-  const status = p.cloned
-    ? `<span class="badge badge-ok"><span class="dot"></span>clonato</span>`
-    : `<span class="badge badge-pend"><span class="dot"></span>non clonato</span>`;
-  const dirty = p.dirty ? `<span class="badge badge-run"><span class="dot"></span>modifiche locali</span>` : '';
-  const head = (p.cloned && p.head) ? `<div class="text-[11px] text-fg-dim font-mono mt-1 truncate" title="${_esc(p.head)}">${_esc(p.head)}</div>` : '';
-  const cloneBtn = `<button class="btn btn-ghost btn-sm mt-3" data-clone="${p.key}"><i data-lucide="download-cloud" class="w-3.5 h-3.5"></i>${p.cloned ? 'Aggiorna (pull)' : 'Clona repo'}</button>`;
-  return `<div class="card p-5">
-    <div class="flex items-start gap-4">
-      <div class="w-11 h-11 rounded-md flex items-center justify-center shrink-0" style="background:${p.accent}1a;border:1px solid ${p.accent}55">
-        <i data-lucide="${p.icon}" class="w-5 h-5" style="color:${p.accent}"></i>
-      </div>
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2 flex-wrap">
-          <div class="font-semibold text-[15px]">${_esc(p.name)}</div>${status}${dirty}
-        </div>
-        <p class="text-[12.5px] text-fg-mute mt-1">${_esc(p.desc)}</p>
-        <div class="flex items-center gap-3 mt-2 text-[11px] text-fg-mute font-mono flex-wrap">
-          <span class="inline-flex items-center gap-1"><i data-lucide="file-code-2" class="w-3 h-3"></i>${_esc(p.playbook)}</span>
-          <span class="inline-flex items-center gap-1"><i data-lucide="server" class="w-3 h-3"></i>${_esc(p.inventory)}</span>
-          <a href="${_esc(p.repo)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-brand hover:text-brand-hi"><i data-lucide="github" class="w-3 h-3"></i>repo</a>
-        </div>
-        ${head}${cloneBtn}
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderDashboard() {
-  const total = PROJECTS.length, cloned = PROJECTS.filter(p => p.cloned).length;
-  const ring = $('#dash-proj-ring'), center = $('#dash-proj-center');
-  if (ring) {
-    ring.style.setProperty('--ring-color', (total && cloned === total) ? '#3fb87a' : (cloned ? '#e8a838' : '#6a7280'));
-    ring.style.setProperty('--ring-val', total ? Math.round(cloned/total*100) : 100);
+function populateCtxSelects() {
+  const opts = state.contexts.length
+    ? state.contexts.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('')
+    : `<option value="">(nessun context — installa kubectl)</option>`;
+  for (const id of ['ctx-select','cluster-ctx']) {
+    const el = $('#'+id); if (!el) continue;
+    el.innerHTML = opts;
+    if (state.ctx && state.contexts.includes(state.ctx)) el.value = state.ctx;
   }
-  if (center) center.innerHTML = `<div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">REPOS</div>
-    <div class="text-[15px] font-bold leading-none text-fg">${cloned}/${total}</div>`;
-  const ct = $('#dash-proj-text'); if (ct) ct.textContent = total ? `${cloned} clonati su ${total}` : 'nessun progetto';
-
-  const p = getActiveProject();
-  const an = $('#dash-active-name'); if (an) an.textContent = p ? p.name : '—';
-  const as = $('#dash-active-sub');  if (as) as.textContent = p ? (p.cloned ? (p.head || 'clonato') : 'non clonato — clona il repo') : 'seleziona un progetto';
-  const ai = $('#dash-active-icon'); if (ai && p) ai.style.color = p.accent;
-
-  const strip = $('#dash-proj-strip');
-  if (strip) {
-    strip.innerHTML = PROJECTS.map(p => {
-      const cls = p.cloned ? 'badge-ok' : 'badge-pend';
-      return `<a href="#/projects" class="badge ${cls}" data-set-active="${p.key}" title="${_esc(p.desc)}"><span class="dot"></span>${_esc(p.name)}</a>`;
-    }).join('') || '<span class="text-fg-mute text-[12px] px-2 py-1">Nessun progetto</span>';
-  }
-  renderJobs();
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
 }
+$('#ctx-select')?.addEventListener('change', e => { state.ctx = e.target.value; });
+$('#cluster-ctx')?.addEventListener('change', e => { state.ctx = e.target.value; });
 
-function renderProjects() {
-  const grid = $('#projects-grid');
-  if (!grid) return;
-  if (!PROJECTS.length) { grid.innerHTML = '<div class="text-fg-mute text-[13px]">Backend non raggiungibile o nessun progetto configurato.</div>'; return; }
-  grid.innerHTML = PROJECTS.map(p => {
-    const active = p.key === activeKey;
-    const status = p.cloned ? `<span class="badge badge-ok"><span class="dot"></span>clonato</span>` : `<span class="badge badge-pend"><span class="dot"></span>non clonato</span>`;
-    const dirty = p.dirty ? `<span class="badge badge-run"><span class="dot"></span>modifiche locali</span>` : '';
-    const head = (p.cloned && p.head) ? `<div class="text-[11px] text-fg-dim font-mono mt-2 truncate" title="${_esc(p.head)}">${_esc(p.head)}</div>` : '';
-    const repoShort = p.repo.replace('https://github.com/','');
-    return `<div class="card card-hover p-5 ${active ? '!border-brand' : ''}">
-      <div class="flex items-start gap-3 mb-3">
-        <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:${p.accent}1a;border:1px solid ${p.accent}55"><i data-lucide="${p.icon}" class="w-5 h-5" style="color:${p.accent}"></i></div>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2 flex-wrap"><div class="font-semibold text-[14px]">${_esc(p.name)}</div>${active ? '<span class="badge badge-info"><span class="dot"></span>attivo</span>' : ''}</div>
-          <a href="${_esc(p.repo)}" target="_blank" rel="noopener" class="text-[11px] text-brand hover:text-brand-hi font-mono inline-flex items-center gap-1">${_esc(repoShort)} <i data-lucide="external-link" class="w-3 h-3"></i></a>
-        </div>
-      </div>
-      <p class="text-[12.5px] text-fg-mute mb-3">${_esc(p.desc)}</p>
-      <div class="flex items-center gap-2 flex-wrap mb-3">${status}${dirty}</div>
-      <div class="grid grid-cols-2 gap-1.5 text-[11px] text-fg-mute font-mono mb-1">
-        <div class="inline-flex items-center gap-1 truncate"><i data-lucide="file-code-2" class="w-3 h-3 shrink-0"></i>${_esc(p.playbook)}</div>
-        <div class="inline-flex items-center gap-1"><i data-lucide="server" class="w-3 h-3 shrink-0"></i>${p.groups.length} groups</div>
-        <div class="inline-flex items-center gap-1"><i data-lucide="git-branch" class="w-3 h-3 shrink-0"></i>${_esc(p.branch)}</div>
-        <div class="inline-flex items-center gap-1"><i data-lucide="boxes" class="w-3 h-3 shrink-0"></i>${p.roles.length} roles</div>
-      </div>
-      ${head}
-      <div class="hairline my-4"></div>
-      <div class="flex flex-wrap gap-2">
-        ${active ? '' : `<button class="btn btn-ghost btn-sm" data-set-active="${p.key}"><i data-lucide="check" class="w-3.5 h-3.5"></i>Rendi attivo</button>`}
-        <button class="btn btn-ghost btn-sm" data-clone="${p.key}"><i data-lucide="download-cloud" class="w-3.5 h-3.5"></i>${p.cloned ? 'Pull' : 'Clona'}</button>
-        <a href="#/deploy" class="btn btn-primary btn-sm" data-set-active="${p.key}"><i data-lucide="rocket" class="w-3.5 h-3.5"></i>Deploy</a>
-      </div>
-    </div>`;
-  }).join('');
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
-}
-
-function renderOpScreen(key) {
-  const screen = $(`section[data-screen="${key}"]`);
-  if (!screen) return;
-  const p = getActiveProject();
-  const banner = screen.querySelector('[data-op-banner]');
-  if (banner) banner.innerHTML = projectBannerHTML(p);
-  const sel = screen.querySelector('[data-op-limit]');
-  if (sel) {
-    const groups = p ? p.groups : [];
-    sel.innerHTML = `<option value="">— tutti gli host (nessun --limit) —</option>` +
-      groups.map(g => `<option value="${_esc(g)}">${_esc(g)}</option>`).join('');
-  }
-  const disabled = !p || !p.cloned;
-  screen.querySelectorAll('[data-op]').forEach(b => { b.disabled = disabled; });
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
-}
-
-async function renderInventory() {
-  const p = getActiveProject();
-  $('#inventory-banner').innerHTML = projectBannerHTML(p);
-  const body = $('#inventory-body');
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
-  if (!p) { body.innerHTML = ''; return; }
-  if (!p.cloned) { body.innerHTML = '<div class="card p-6 text-[13px] text-fg-mute">Repo non clonato. Vai su <a href="#/projects" class="text-brand hover:text-brand-hi">Progetti</a> e clicca Clona.</div>'; return; }
-  body.innerHTML = '<div class="card p-6 text-fg-mute text-[13px]">Caricamento inventory…</div>';
+async function triggerScan(ctx) {
+  state.lines = []; refreshActivity();
+  setStatus('running');
+  pushTerminalLines([`\x1b[2m$ scan ${ctx || '(current)'} — ${new Date().toLocaleTimeString()}\x1b[0m`]);
   try {
-    const r = await fetch(`${API}/api/inventory?project=${encodeURIComponent(p.key)}`);
+    const r = await fetch(`${API}/api/scan`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({context: ctx || null}) });
     const j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    const groups = j.groups || [];
-    body.innerHTML = `<div class="text-[12px] text-fg-mute mb-3 font-mono">${_esc(j.inventory)}</div>` + (groups.map(g => {
-      const kindBadge = g.kind === 'vars' ? 'badge-info' : (g.kind === 'children' ? 'badge-pend' : 'badge-ok');
-      const rows = g.lines.map(l => `<div class="px-4 py-2 border-b border-rule last:border-0 font-mono text-[12.5px] text-fg">${_esc(l)}</div>`).join('');
-      return `<div class="card mb-4">
-        <div class="px-5 py-3 border-b border-rule flex items-center justify-between">
-          <div class="flex items-center gap-2"><span class="font-semibold text-[14px] font-mono">[${_esc(g.name)}]</span><span class="badge ${kindBadge}"><span class="dot"></span>${g.kind}</span></div>
-          <span class="text-[11px] text-fg-mute">${g.lines.length} righe</span>
-        </div>
-        <div>${rows || '<div class="px-4 py-3 text-fg-dim text-[12px]">vuoto</div>'}</div>
-      </div>`;
-    }).join('') || '<div class="card p-6 text-fg-mute">Inventory vuoto.</div>');
-    lucide.createIcons({ icons: lucide.icons, attrs:{} });
-  } catch (e) {
-    body.innerHTML = `<div class="card p-6 text-bad text-[13px]">Errore: ${_esc(e.message)}</div>`;
-  }
-}
-
-let _filesCurrent = { key:null, path:null };
-async function renderFiles() {
-  const p = getActiveProject();
-  $('#files-banner').innerHTML = projectBannerHTML(p);
-  const list = $('#files-list'), content = $('#files-content'), pathEl = $('#files-path');
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
-  if (!p) { list.innerHTML = ''; content.innerHTML = '<span class="hl-cmt">Nessun progetto.</span>'; pathEl.textContent=''; return; }
-  if (!p.cloned) { list.innerHTML = '<div class="p-3 text-[12px] text-fg-mute">Repo non clonato.</div>'; content.innerHTML = '<span class="hl-cmt">Clona il repo dalla pagina Progetti.</span>'; pathEl.textContent=''; return; }
-  list.innerHTML = '<div class="p-3 text-[12px] text-fg-mute">Caricamento…</div>';
-  try {
-    const r = await fetch(`${API}/api/files?project=${encodeURIComponent(p.key)}`);
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    const files = j.files || [];
-    if (!files.length) { list.innerHTML = '<div class="p-3 text-[12px] text-fg-mute">Nessun file trovato.</div>'; return; }
-    list.innerHTML = files.map((f,i) => `<button class="files-tab w-full text-left px-3 py-2 text-[12px] font-mono border-b border-rule hover:bg-ink-700 ${i===0?'fv-on':''}" data-file="${_esc(f.path)}">${_esc(f.label)}</button>`).join('');
-    loadProjectFile(p.key, files[0].path);
-  } catch (e) {
-    list.innerHTML = `<div class="p-3 text-[12px] text-bad">Errore: ${_esc(e.message)}</div>`;
-  }
-}
-async function loadProjectFile(key, path) {
-  const content = $('#files-content'), pathEl = $('#files-path');
-  $$('.files-tab').forEach(b => b.classList.toggle('fv-on', b.dataset.file === path));
-  content.innerHTML = '<span class="hl-cmt">Caricamento…</span>';
-  pathEl.textContent = path;
-  _filesCurrent = { key, path };
-  try {
-    const r = await fetch(`${API}/api/files?project=${encodeURIComponent(key)}&path=${encodeURIComponent(path)}`);
-    const j = await r.json();
-    const text = j.error ? `# ${j.error}` : j.content;
-    content.innerHTML = syntaxHighlight(text, (path.split('.').pop() || ''));
-  } catch (e) {
-    content.innerHTML = `<span class="hl-enc">Errore: ${_esc(e.message)}</span>`;
-  }
-}
-$('#files-copy')?.addEventListener('click', () => {
-  const content = $('#files-content');
-  if (content) navigator.clipboard.writeText(content.textContent).then(() => flashCopy($('#files-copy')));
-});
-document.addEventListener('click', e => {
-  const t = e.target.closest('.files-tab');
-  if (t) { const p = getActiveProject(); if (p) loadProjectFile(p.key, t.dataset.file); }
-});
-
-/* ============================================================
-   ESECUZIONE: run op + clone
-   ============================================================ */
-async function runOp(op, limit) {
-  const p = getActiveProject();
-  if (!p) { location.hash = '#/projects'; return; }
-  const action = `${op}:${p.key}`;
-  pushJob(action);
-  state.lastSeenLines = 0;
-  setRunningStatus('running', action);
-  const lbl = actionLabel(action).name;
-  pushTerminalLines([`\x1b[2m$ ${lbl}${limit ? ` (--limit ${limit})` : ''} — ${new Date().toLocaleTimeString()}\x1b[0m`]);
-  await callRun({ project: p.key, op, limit });
-}
-async function callRun(payload) {
-  try {
-    const r = await fetch(`${API}/api/run`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    const j = await r.json();
-    if (!r.ok) {
-      pushTerminalLines([`\x1b[1;31m[ERR] ${j.error || 'HTTP ' + r.status}\x1b[0m`]);
-      setRunningStatus('failed');
-      if (state.currentJobId) { finishCurrentJob('failed'); state.currentJobId = null; }
-    }
-    return j;
-  } catch (e) {
-    pushTerminalLines([`\x1b[1;31m[ERR] Backend non raggiungibile: ${e.message}\x1b[0m`]);
-    setRunningStatus('failed');
-    if (state.currentJobId) { finishCurrentJob('failed'); state.currentJobId = null; }
-    return { error: e.message };
-  }
-}
-async function cloneProject(key) {
-  const p = PROJECTS_BY_KEY[key];
-  if (!p) return;
-  const action = `clone:${key}`;
-  pushJob(action);
-  state.lastSeenLines = 0;
-  setRunningStatus('running', action);
-  pushTerminalLines([
-    `\x1b[1;36m$ ${p.cloned ? 'git pull' : 'git clone'} · ${p.name} — ${new Date().toLocaleTimeString()}\x1b[0m`,
-    `\x1b[2m  output live nella tab Activity Log\x1b[0m`,
-  ]);
-  try {
-    const r = await fetch(`${API}/api/project/clone`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key }) });
-    const j = await r.json();
-    if (!r.ok) {
-      pushTerminalLines([`\x1b[1;31m[ERR] ${j.error || 'HTTP ' + r.status}\x1b[0m`]);
-      setRunningStatus('failed');
-      if (state.currentJobId) { finishCurrentJob('failed'); state.currentJobId = null; }
-    }
-  } catch (e) {
-    pushTerminalLines([`\x1b[1;31m[ERR] ${e.message}\x1b[0m`]);
-    setRunningStatus('failed');
-    if (state.currentJobId) { finishCurrentJob('failed'); state.currentJobId = null; }
-  }
+    if (!r.ok) { pushTerminalLines([`\x1b[1;31m[ERR] ${j.error || 'HTTP '+r.status}\x1b[0m`]); setStatus('failed'); }
+  } catch (e) { pushTerminalLines([`\x1b[1;31m[ERR] ${e.message}\x1b[0m`]); setStatus('failed'); }
 }
 
 async function pollOutput() {
   try {
     const r = await fetch(`${API}/api/output?since=${state.lastSeenLines}`);
     const j = await r.json();
-    const newLines = j.lines || [];
-    if (newLines.length) {
-      pushTerminalLines(newLines);
-      state.lastSeenLines = j.total ?? (state.lastSeenLines + newLines.length);
-    }
+    const lines = j.lines || [];
+    if (lines.length) { pushTerminalLines(lines); state.lastSeenLines = j.total ?? (state.lastSeenLines + lines.length); }
     if (j.status && j.status !== state.status) {
-      const finishingAction = state.currentAction;
-      setRunningStatus(j.status);
-      if (state.currentJobId && (j.status === 'success' || j.status === 'failed')) {
-        finishCurrentJob(j.status); state.currentJobId = null;
-      }
-      if ((j.status === 'success' || j.status === 'failed') && finishingAction && finishingAction.startsWith('clone')) {
-        loadProjects();
-      }
+      setStatus(j.status);
+      if (j.status === 'success') loadLastScan();
     }
-  } catch { /* backend non raggiungibile */ }
+  } catch {}
 }
 setInterval(pollOutput, 700);
 
+async function loadLastScan() {
+  try {
+    const r = await fetch(`${API}/api/last-scan`, { cache:'no-store' });
+    const j = await r.json();
+    state.scan = j && !j.empty ? j : null;
+    rerender(currentRoute());
+  } catch {}
+}
+
 /* ============================================================
-   ACTION BINDINGS
+   DASHBOARD
    ============================================================ */
-document.addEventListener('click', async (e) => {
-  const opBtn = e.target.closest('[data-op]');
-  if (opBtn && !opBtn.disabled) {
-    const op = opBtn.dataset.op;
-    const screen = opBtn.closest('section');
-    const limit = screen ? (screen.querySelector('[data-op-limit]')?.value || '') : '';
-    await runOp(op, limit);
-    return;
+function renderDashboard() {
+  const s = state.scan;
+  const sum = (s && s.summary) || {};
+  setRing('d-total-ring','d-total-center', sum.total, '#5aa6ed', 'CERTS');
+  setRing('d-exp-ring','d-exp-center', sum.expired, sum.expired ? '#e25555' : '#3fb87a', 'SCADUTI');
+  setRing('d-30d-ring','d-30d-center', sum.expiring30d, sum.expiring30d ? '#e8a838' : '#3fb87a', '≤30G');
+  setRing('d-find-ring','d-find-center', sum.findings, sum.findings ? '#e8a838' : '#3fb87a', 'ALERT');
+  $('#d-total-text').textContent = s ? `${sum.total||0} certificati` : 'nessuna scansione';
+  $('#d-exp-text').textContent   = s ? `${sum.expired||0} scaduti`  : '—';
+  $('#d-30d-text').textContent   = s ? `${sum.expiring30d||0} in scadenza` : '—';
+  $('#d-find-text').textContent  = s ? `${sum.findings||0} anomalie` : '—';
+
+  const strip = $('#d-breakdown');
+  if (strip) {
+    if (!s) strip.innerHTML = '<span class="text-[12px] text-fg-mute px-2 py-1">Lancia una scansione per popolare la dashboard.</span>';
+    else strip.innerHTML = `
+      <span class="badge badge-info"><span class="dot"></span>Ingress: ${sum.exposed||0}</span>
+      <span class="badge badge-pend"><span class="dot"></span>Interno: ${sum.internal||0}</span>
+      <span class="badge badge-ok"><span class="dot"></span>CA: ${sum.cas||0}</span>
+      ${s.rancher && s.rancher.installed ? `<span class="badge badge-info"><span class="dot"></span>Rancher cacerts: ${(s.rancher.cacertsChecksum||'').slice(0,12)}…</span>` : ''}
+      ${s.errors && s.errors.length ? `<span class="badge badge-bad"><span class="dot"></span>Errori: ${s.errors.length}</span>` : ''}
+    `;
   }
-  const cloneBtn = e.target.closest('[data-clone]');
-  if (cloneBtn) { e.preventDefault(); await cloneProject(cloneBtn.dataset.clone); return; }
 
-  const setActiveBtn = e.target.closest('[data-set-active]');
-  if (setActiveBtn) { setActive(setActiveBtn.dataset.setActive); /* anchors still navigate */ }
+  const tf = $('#d-top-findings');
+  if (tf) {
+    if (!s || !s.findings || !s.findings.length) {
+      tf.innerHTML = '<div class="px-6 py-8 text-center text-fg-mute text-[13px]">' + (s ? 'Nessuna anomalia trovata.' : 'Nessuna scansione disponibile.') + '</div>';
+    } else {
+      const sev = { error:'badge-bad', warn:'badge-run', info:'badge-info' };
+      const top = s.findings.slice(0, 5);
+      tf.innerHTML = top.map(f => `
+        <a href="#/findings" class="block px-6 py-3 hover:bg-ink-700 transition-colors">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2"><span class="badge ${sev[f.severity]||'badge-pend'}"><span class="dot"></span>${_esc(f.severity)}</span><span class="font-medium text-[14px]">${_esc(f.title)}</span></div>
+              <div class="text-[12px] text-fg-mute mt-1 truncate">${_esc(f.detail)}</div>
+            </div>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-fg-mute shrink-0"></i>
+          </div>
+        </a>
+      `).join('');
+    }
+  }
+  lucide.createIcons({icons:lucide.icons, attrs:{}});
+}
+function setRing(ringId, centerId, val, color, label) {
+  const ring = $('#'+ringId), center = $('#'+centerId);
+  if (!ring || !center) return;
+  ring.style.setProperty('--ring-color', color);
+  ring.style.setProperty('--ring-val', 100);
+  const v = (val == null) ? '—' : String(val);
+  center.innerHTML = `<div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">${label}</div><div class="text-[15px] font-bold leading-none" style="color:${color}">${_esc(v)}</div>`;
+}
 
-  const clrTerm = e.target.closest('[data-clear-term]');
-  if (clrTerm) { clearTerminals(); return; }
-  const cpyTerm = e.target.closest('[data-copy-term]');
-  if (cpyTerm) { copyTerminal(cpyTerm); return; }
-  const copy = e.target.closest('[data-copy]');
-  if (copy) { navigator.clipboard.writeText(copy.dataset.copy).then(()=> flashCopy(copy)); }
-});
+/* ============================================================
+   CLUSTER
+   ============================================================ */
+function renderClusterScreen() {
+  const s = state.scan, box = $('#cluster-summary');
+  if (!box) return;
+  if (!s) { box.innerHTML = '<div class="card p-6 text-fg-mute text-[13px]">Nessuna scansione: clicca <span class="font-mono text-fg">Scansiona</span>.</div>'; return; }
+  const sum = s.summary || {};
+  const errs = s.errors || [];
+  const rancherBlock = s.rancher && s.rancher.installed
+    ? `<div class="card p-5 mb-3"><div class="flex items-start gap-3"><i data-lucide="shield" class="w-5 h-5 text-info shrink-0 mt-0.5"></i>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-[14px] mb-1">Rancher rilevato</div>
+          <div class="text-[12px] text-fg-mute">server-url: <span class="font-mono text-fg break-all">${_esc(s.rancher.serverURL||'—')}</span></div>
+          <div class="text-[12px] text-fg-mute mt-1">cacerts checksum: <span class="font-mono text-fg">${_esc((s.rancher.cacertsChecksum||'').slice(0,32))}…</span></div>
+        </div></div></div>`
+    : `<div class="card p-5 mb-3 text-[13px] text-fg-mute">Rancher non rilevato in questo context (nessun <span class="font-mono text-fg">setting/cacerts</span>).</div>`;
+  box.innerHTML = `
+    <div class="card p-5 mb-3">
+      <div class="text-[11px] text-fg-mute uppercase tracking-wider mb-1">Context scansionato</div>
+      <div class="text-[15px] font-semibold font-mono break-all">${_esc(s.context || s.currentContext || '(current)')}</div>
+      <div class="hairline my-4"></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-[12px]">
+        <div><div class="text-fg-mute">Cert totali</div><div class="text-fg text-[18px] font-semibold">${sum.total||0}</div></div>
+        <div><div class="text-fg-mute">Scaduti</div><div class="text-[18px] font-semibold" style="color:${(sum.expired||0)>0?'#e25555':'#3fb87a'}">${sum.expired||0}</div></div>
+        <div><div class="text-fg-mute">≤30g</div><div class="text-[18px] font-semibold" style="color:${(sum.expiring30d||0)>0?'#e8a838':'#3fb87a'}">${sum.expiring30d||0}</div></div>
+        <div><div class="text-fg-mute">Anomalie</div><div class="text-[18px] font-semibold" style="color:${(sum.findings||0)>0?'#e8a838':'#3fb87a'}">${sum.findings||0}</div></div>
+      </div>
+    </div>
+    ${rancherBlock}
+    ${errs.length ? `<div class="card p-5"><div class="font-medium text-[14px] mb-2 text-bad">Errori durante la scansione</div>${errs.map(e=>`<div class="text-[12px] text-fg-mute font-mono">${_esc(e.where)}: ${_esc(e.msg)}</div>`).join('')}</div>` : ''}
+  `;
+  lucide.createIcons({icons:lucide.icons, attrs:{}});
+}
 
+/* ============================================================
+   CERTIFICATI (tabella + dettaglio modal)
+   ============================================================ */
+function _certState(p) {
+  if (!p) return ['badge-pend','?'];
+  if (p.expired) return ['badge-bad','scaduto'];
+  if (p.daysRemaining != null && p.daysRemaining <= 30) return ['badge-run',`${p.daysRemaining}g`];
+  if (p.daysRemaining != null) return ['badge-ok','ok'];
+  return ['badge-pend','?'];
+}
+function _exposureBadge(e) {
+  if (e === 'ingress')  return '<span class="badge badge-info"><span class="dot"></span>ingress</span>';
+  if (e === 'ca')       return '<span class="badge badge-pend"><span class="dot"></span>CA</span>';
+  return '<span class="badge badge-pend"><span class="dot"></span>interno</span>';
+}
+function renderCertsTable() {
+  const tbody = $('#certs-tbody');
+  if (!tbody) return;
+  const s = state.scan;
+  if (!s) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-fg-mute py-10">Lancia una scansione.</td></tr>'; return; }
+  let rows = s.certs || [];
+  const f = state.filters;
+  if (f.status === 'expired')  rows = rows.filter(r => (r.parsed||{}).expired);
+  if (f.status === 'expiring') rows = rows.filter(r => { const d=(r.parsed||{}).daysRemaining; return d!=null && d>=0 && d<=30; });
+  if (f.status === 'ok')       rows = rows.filter(r => { const p=r.parsed||{}; return !p.expired && (p.daysRemaining==null || p.daysRemaining>30); });
+  if (f.expo !== 'all')        rows = rows.filter(r => r.exposure === f.expo);
+  if (f.q) {
+    const q = f.q.toLowerCase();
+    rows = rows.filter(r => {
+      const p = r.parsed || {};
+      return (p.subjectCN||'').toLowerCase().includes(q)
+          || (r.namespace||'').toLowerCase().includes(q)
+          || (r.secret||'').toLowerCase().includes(q)
+          || (p.issuerCN||'').toLowerCase().includes(q);
+    });
+  }
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-fg-mute py-10">Nessun cert corrisponde ai filtri.</td></tr>'; return; }
+  tbody.innerHTML = rows.map((r,i) => {
+    const p = r.parsed || {};
+    const [cls, txt] = _certState(p);
+    return `<tr class="cursor-pointer hover:!bg-ink-700" data-cert-i="${i}">
+      <td><div class="font-medium text-fg">${_esc(p.subjectCN || '(nessun CN)')}</div><div class="text-[11px] text-fg-dim font-mono truncate" title="${_esc(p.subject||'')}">${_esc(p.subject||'')}</div></td>
+      <td class="font-mono text-[12px] text-fg-mute"><div>${_esc(r.namespace)}</div><div class="text-fg">${_esc(r.secret)}</div></td>
+      <td>${_exposureBadge(r.exposure)}</td>
+      <td><span class="badge ${cls}"><span class="dot"></span>${_esc(txt)}</span></td>
+      <td class="text-[12px]"><div class="text-fg">${_esc(p.issuerCN||'—')}</div>${p.selfSigned?'<div class="text-[11px] text-warn">self-signed</div>':''}</td>
+      <td class="text-[12px] text-fg-mute font-mono">${p.notAfter ? new Date(p.notAfter).toLocaleDateString() : '—'}</td>
+    </tr>`;
+  }).join('');
+  // bind click -> modal
+  $$('#certs-tbody tr[data-cert-i]').forEach(tr => {
+    tr.addEventListener('click', () => openCertDetail(rows[parseInt(tr.dataset.certI,10)]));
+  });
+}
+$('#certs-filter-status')?.addEventListener('change', e => { state.filters.status = e.target.value; renderCertsTable(); });
+$('#certs-filter-expo')?.addEventListener('change',  e => { state.filters.expo   = e.target.value; renderCertsTable(); });
+$('#certs-filter-q')?.addEventListener('input',     e => { state.filters.q       = e.target.value; renderCertsTable(); });
+
+function openCertDetail(c) {
+  const p = c.parsed || {};
+  const sans = (p.sans||[]).map(s => `<span class="font-mono text-fg">${_esc(s)}</span>`).join('<span class="text-fg-dim">, </span>');
+  $('#cm-title').textContent = `${p.subjectCN || '(no CN)'} · ${c.namespace}/${c.secret}`;
+  $('#cm-body').innerHTML = `
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <div><div class="text-[11px] text-fg-mute mb-1">Subject</div><div class="font-mono text-[12px] break-all">${_esc(p.subject||'—')}</div></div>
+      <div><div class="text-[11px] text-fg-mute mb-1">Issuer</div><div class="font-mono text-[12px] break-all">${_esc(p.issuer||'—')}</div></div>
+      <div><div class="text-[11px] text-fg-mute mb-1">notBefore</div><div class="font-mono text-[12px]">${_esc(p.notBefore||'—')}</div></div>
+      <div><div class="text-[11px] text-fg-mute mb-1">notAfter</div><div class="font-mono text-[12px]">${_esc(p.notAfter||'—')} (${p.daysRemaining!=null?p.daysRemaining+'g':'?'})</div></div>
+      <div><div class="text-[11px] text-fg-mute mb-1">Serial</div><div class="font-mono text-[12px] break-all">${_esc(p.serial||'—')}</div></div>
+      <div><div class="text-[11px] text-fg-mute mb-1">Tipi</div><div class="text-[12px]">${p.isCA?'<span class="badge badge-pend"><span class="dot"></span>CA</span> ':''}${p.selfSigned?'<span class="badge badge-run"><span class="dot"></span>self-signed</span>':''}${(p.eku||[]).map(e=>`<span class="badge badge-info"><span class="dot"></span>${_esc(e)}</span>`).join(' ')}</div></div>
+    </div>
+    <div class="mb-4"><div class="text-[11px] text-fg-mute mb-1">SAN</div><div class="text-[12px] leading-relaxed">${sans || '<span class="text-fg-dim">—</span>'}</div></div>
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <div><div class="text-[11px] text-fg-mute mb-1">Fingerprint SHA-256</div><div class="font-mono text-[11.5px] break-all">${_esc(p.fingerprintSHA256||'—')}</div></div>
+      <div><div class="text-[11px] text-fg-mute mb-1">SPKI SHA-256</div><div class="font-mono text-[11.5px] break-all">${_esc(p.spkiSHA256||'—')}</div></div>
+    </div>
+    <div class="hairline my-4"></div>
+    <div class="text-[11px] text-fg-mute mb-1">Riferimenti Ingress</div>
+    ${(c.ingressRefs||[]).length ? c.ingressRefs.map(i => `<div class="text-[12px]"><span class="font-mono text-fg">${_esc(i.namespace)}/${_esc(i.ingress)}</span> <span class="text-fg-mute">host:</span> ${(i.hosts||i.rulesHosts||[]).map(h=>`<span class="font-mono text-fg">${_esc(h)}</span>`).join(', ')||'<span class="text-fg-dim">—</span>'}</div>`).join('') : '<div class="text-[12px] text-fg-dim">nessun ingress lo referenzia</div>'}
+  `;
+  $('#cert-modal').classList.remove('hidden'); $('#cert-modal').classList.add('flex');
+  lucide.createIcons({icons:lucide.icons, attrs:{}});
+}
+$('#cm-close')?.addEventListener('click', () => { $('#cert-modal').classList.replace('flex','hidden'); });
+$('#cert-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.replace('flex','hidden'); });
+
+/* ============================================================
+   CA & CATENA
+   ============================================================ */
+function renderCaScreen() {
+  const box = $('#ca-body'); if (!box) return;
+  const s = state.scan;
+  if (!s) { box.innerHTML = '<div class="card p-6 text-fg-mute text-[13px]">Lancia una scansione.</div>'; return; }
+  const rancher = s.rancher || {};
+  const cas = (s.certs||[]).filter(c => (c.parsed||{}).isCA);
+  let html = '';
+  if (rancher.installed) {
+    html += `<div class="card p-6 mb-4">
+      <div class="flex items-start gap-3 mb-3"><i data-lucide="shield" class="w-5 h-5 text-info shrink-0 mt-0.5"></i>
+      <div><div class="font-medium text-[15px]">Rancher · CA pubblicata</div>
+        <p class="text-[12px] text-fg-mute mt-1"><span class="font-mono">setting.management.cattle.io/cacerts</span> espone la CA che gli agent dei downstream cluster usano per fidarsi di questo control-plane. Se il checksum cambia senza propagarlo, gli agent perdono il trust.</p>
+      </div></div>
+      <div class="grid grid-cols-2 gap-4 text-[12px]"><div><div class="text-fg-mute mb-1">Server URL</div><div class="font-mono text-fg break-all">${_esc(rancher.serverURL||'—')}</div></div>
+      <div><div class="text-fg-mute mb-1">Checksum (SHA-256)</div><div class="font-mono text-fg break-all">${_esc(rancher.cacertsChecksum||'—')}</div></div></div>
+    </div>`;
+  }
+  html += `<div class="card"><div class="px-6 py-4 border-b border-rule"><h2 class="text-[15px] font-semibold">CA viste nei secret (${cas.length})</h2></div>`;
+  if (!cas.length) html += '<div class="p-6 text-fg-mute text-[13px]">Nessuna CA trovata in <span class="font-mono">tls-ca</span>/<span class="font-mono">ca.crt</span>.</div>';
+  else html += cas.map(c => { const p=c.parsed||{}; return `<div class="px-6 py-4 border-b border-rule last:border-0">
+    <div class="font-medium text-[14px]">${_esc(p.subjectCN||'(no CN)')}</div>
+    <div class="text-[11px] text-fg-mute font-mono">${_esc(c.namespace)}/${_esc(c.secret)}${c.chainTotal>1?` · pos ${c.chainIndex+1}/${c.chainTotal}`:''}</div>
+    <div class="text-[12px] text-fg-mute mt-1">Issuer: ${_esc(p.issuerCN||'—')} · scade ${_esc(p.notAfter||'—')}</div>
+    <div class="text-[11px] font-mono text-fg-dim mt-1 break-all">${_esc(p.fingerprintSHA256||'')}</div>
+  </div>`; }).join('');
+  html += '</div>';
+  box.innerHTML = html;
+  lucide.createIcons({icons:lucide.icons, attrs:{}});
+}
+
+/* ============================================================
+   INGRESS & SPARSI
+   ============================================================ */
+function renderIngressScreen() {
+  const s = state.scan;
+  const tbody = $('#ingress-tbody'), orph = $('#orphans-body');
+  if (!s) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-fg-mute py-10">Nessuna scansione.</td></tr>'; orph.innerHTML='—'; return; }
+  const igs = s.ingresses || [];
+  tbody.innerHTML = igs.length ? igs.map(i => `<tr>
+    <td class="font-mono text-[12px]"><div class="text-fg-mute">${_esc(i.namespace)}</div><div class="text-fg">${_esc(i.ingress)}</div></td>
+    <td class="text-[12px] text-fg-mute">${_esc(i.ingressClass||'—')}</td>
+    <td class="text-[12px]">${(i.hosts||i.rulesHosts||[]).map(h=>`<span class="font-mono text-fg">${_esc(h)}</span>`).join(', ') || '<span class="text-fg-dim">—</span>'}</td>
+    <td class="font-mono text-[12px] text-fg">${_esc(i.secretName||'—')}</td>
+  </tr>`).join('') : '<tr><td colspan="4" class="text-center text-fg-mute py-10">Nessun ingress con TLS.</td></tr>';
+  const refs = new Set(igs.map(i => `${i.namespace}/${i.secretName}`));
+  const orphans = (s.certs||[]).filter(c => c.secretType==='kubernetes.io/tls' && !(c.parsed||{}).isCA && !refs.has(`${c.namespace}/${c.secret}`));
+  orph.innerHTML = orphans.length ? orphans.map(c => { const p=c.parsed||{}; return `<div class="p-3 border-b border-rule last:border-0">
+    <div class="font-mono text-[12.5px] text-fg">${_esc(c.namespace)}/${_esc(c.secret)}</div>
+    <div class="text-[11px] text-fg-mute">CN: ${_esc(p.subjectCN||'—')} · issuer: ${_esc(p.issuerCN||'—')} · scade ${_esc(p.notAfter||'—')}</div>
+  </div>`; }).join('') : '<div class="p-3 text-fg-dim text-[12px]">Nessun secret TLS orfano.</div>';
+}
+
+/* ============================================================
+   ANOMALIE & FIX (con remediation per VM)
+   ============================================================ */
+const SEV_META = { error:{cls:'badge-bad', col:'#e25555'}, warn:{cls:'badge-run', col:'#e8a838'}, info:{cls:'badge-info', col:'#5aa6ed'} };
+function renderFindingsScreen() {
+  const box = $('#findings-body'); if (!box) return;
+  const s = state.scan;
+  if (!s) { box.innerHTML = '<div class="card p-6 text-fg-mute text-[13px]">Lancia una scansione.</div>'; return; }
+  const f = s.findings || [];
+  if (!f.length) { box.innerHTML = '<div class="card p-6"><div class="flex items-start gap-3"><i data-lucide="check-circle-2" class="w-5 h-5 text-ok shrink-0 mt-0.5"></i><div><div class="font-medium text-[14px]">Nessuna anomalia rilevata</div><div class="text-[12px] text-fg-mute mt-1">Tutti i certificati trovati sono validi, le CA coincidono e gli ingress riferiscono secret esistenti.</div></div></div></div>'; lucide.createIcons({icons:lucide.icons,attrs:{}}); return; }
+  box.innerHTML = f.map(it => {
+    const m = SEV_META[it.severity] || SEV_META.info;
+    const wh = it.where || {};
+    const fixLines = (it.fix||[]).map(l => `<div>${ansiToHTML(l)}</div>`).join('');
+    return `<div class="card p-6 mb-3" style="border-color:${m.col}55">
+      <div class="flex items-start gap-4">
+        <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:${m.col}1a;border:1px solid ${m.col}55"><i data-lucide="alert-triangle" class="w-5 h-5" style="color:${m.col}"></i></div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 flex-wrap"><span class="badge ${m.cls}"><span class="dot"></span>${_esc(it.severity)}</span><div class="font-semibold text-[15px]">${_esc(it.title)}</div></div>
+          <p class="text-[13px] text-fg mt-2">${_esc(it.detail)}</p>
+          <div class="hairline my-4"></div>
+          <div class="text-[11px] uppercase tracking-wider text-fg-mute mb-1.5">Dove agire</div>
+          <div class="text-[13px] mb-1"><i data-lucide="server" class="w-3.5 h-3.5 inline-block mr-1 text-info"></i><span class="font-medium">${_esc(wh.vm||'?')}</span> ${wh.context?`<span class="text-fg-mute font-mono text-[12px] ml-2">context: ${_esc(wh.context)}</span>`:''}</div>
+          ${wh.note?`<div class="text-[12px] text-fg-mute mb-2">${_esc(wh.note)}</div>`:''}
+          ${fixLines ? `<div class="text-[11px] uppercase tracking-wider text-fg-mute mt-4 mb-1.5">Comandi consigliati</div>
+            <div class="relative group">
+              <pre class="term-body !p-3 !rounded-md" style="background:#070a0f;border:1px solid #1f2733;color:#cdd6df;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-all">${fixLines}</pre>
+              <button class="icon-btn !w-7 !h-7 absolute top-2 right-2 opacity-0 group-hover:opacity-100" data-copy-fix="${_esc((it.fix||[]).join('\n'))}" title="Copia"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+            </div>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  // wire copy buttons
+  $$('[data-copy-fix]').forEach(b => b.addEventListener('click', () => {
+    navigator.clipboard.writeText(b.dataset.copyFix).then(()=> flashCopy(b));
+  }));
+  lucide.createIcons({icons:lucide.icons, attrs:{}});
+}
 function flashCopy(btn) {
   const ic = btn.querySelector('[data-lucide], svg');
   if (!ic) return;
-  btn.classList.add('copy-flash');
   ic.outerHTML = '<i data-lucide="check" class="w-3.5 h-3.5"></i>';
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
+  lucide.createIcons({icons:lucide.icons, attrs:{}});
   setTimeout(()=> {
-    btn.classList.remove('copy-flash');
     const cur = btn.querySelector('[data-lucide="check"], svg');
-    if (cur) { cur.outerHTML = '<i data-lucide="copy" class="w-3.5 h-3.5"></i>'; lucide.createIcons({ icons: lucide.icons, attrs:{} }); }
+    if (cur) { cur.outerHTML = '<i data-lucide="copy" class="w-3.5 h-3.5"></i>'; lucide.createIcons({icons:lucide.icons, attrs:{}}); }
   }, 1500);
 }
 
 /* ============================================================
-   MISC: history, refresh, hamburger, chart filters
+   PROBE TLS
    ============================================================ */
-$('#btn-clear-history')?.addEventListener('click', () => {
-  state.jobs = []; state.notifCleared = Date.now();
-  saveJobs(); renderJobs();
-});
-$('#btn-refresh')?.addEventListener('click', () => {
-  const ic = $('#btn-refresh').querySelector('svg, i');
-  if (ic) { ic.style.transition = 'transform 600ms ease-out'; ic.style.transform = 'rotate(360deg)'; setTimeout(()=> { ic.style.transform = ''; }, 700); }
-  loadProjects(); pollOutput();
-});
-$('#hamburger')?.addEventListener('click', () => { $('#sidebar').classList.toggle('hidden'); });
-$('#chart-range')?.addEventListener('change', (e) => { chartFilters.range = e.target.value; renderJobs(); });
-$('#chart-type')?.addEventListener('change',  (e) => { chartFilters.type  = e.target.value; renderJobs(); });
-$('#project-select')?.addEventListener('change', (e) => setActive(e.target.value));
-
-document.addEventListener('click', (e) => {
-  const rm = e.target.closest('[data-remove-job]');
-  if (!rm) return;
-  state.jobs = state.jobs.filter(j => j.id !== rm.dataset.removeJob);
-  saveJobs(); renderJobs();
+$('#btn-probe')?.addEventListener('click', async () => {
+  const host = $('#probe-host').value.trim(), port = parseInt($('#probe-port').value||'443',10), sni = $('#probe-sni').value.trim();
+  if (!host) { $('#probe-host').focus(); return; }
+  const res = $('#probe-result'); res.innerHTML = '<div class="card p-5 text-fg-mute text-[13px]">Probe in corso…</div>';
+  try {
+    const r = await fetch(`${API}/api/probe`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({host,port,sni}) });
+    const j = await r.json();
+    if (!r.ok) { res.innerHTML = `<div class="card p-5 text-bad text-[13px]">Errore: ${_esc(j.error||'')}</div>`; return; }
+    if (!j.ok) { res.innerHTML = `<div class="card p-5"><div class="flex items-start gap-3"><i data-lucide="alert-circle" class="w-5 h-5 text-bad shrink-0 mt-0.5"></i><div><div class="font-medium">Handshake fallito</div><div class="text-[12px] text-fg-mute mt-1 font-mono">${_esc(j.error||'')}</div></div></div></div>`; lucide.createIcons({icons:lucide.icons,attrs:{}}); return; }
+    const p = j.parsed || {};
+    const matchScan = (state.scan && (state.scan.certs||[]).find(c => (c.parsed||{}).fingerprintSHA256 === p.fingerprintSHA256));
+    res.innerHTML = `<div class="card p-6">
+      <div class="flex items-start gap-3 mb-4"><i data-lucide="radio" class="w-5 h-5 text-info shrink-0 mt-0.5"></i>
+      <div class="min-w-0"><div class="font-medium text-[15px]">${_esc(p.subjectCN||host)}</div><div class="text-[12px] text-fg-mute mt-1">Servito da <span class="font-mono text-fg">${_esc(host)}:${port}</span> (SNI <span class="font-mono text-fg">${_esc(j.sni)}</span>)</div></div></div>
+      <div class="grid grid-cols-2 gap-4 text-[12.5px]">
+        <div><div class="text-[11px] text-fg-mute mb-1">Issuer</div><div class="text-fg">${_esc(p.issuerCN||'—')}</div></div>
+        <div><div class="text-[11px] text-fg-mute mb-1">Scadenza</div><div class="text-fg">${_esc(p.notAfter||'—')} (${p.daysRemaining!=null?p.daysRemaining+'g':'?'})</div></div>
+        <div class="col-span-2"><div class="text-[11px] text-fg-mute mb-1">Fingerprint SHA-256</div><div class="font-mono text-[11.5px] break-all">${_esc(p.fingerprintSHA256||'—')}</div></div>
+        <div class="col-span-2"><div class="text-[11px] text-fg-mute mb-1">SAN</div><div class="text-[12px]">${(p.sans||[]).map(s=>`<span class="font-mono text-fg">${_esc(s)}</span>`).join(', ')||'<span class="text-fg-dim">—</span>'}</div></div>
+      </div>
+      <div class="hairline my-4"></div>
+      ${matchScan
+        ? `<div class="flex items-start gap-2 text-[13px]"><i data-lucide="check-circle-2" class="w-4 h-4 text-ok mt-0.5"></i><div>Il cert servito CORRISPONDE al secret <span class="font-mono text-fg">${_esc(matchScan.namespace)}/${_esc(matchScan.secret)}</span> dell'ultima scansione.</div></div>`
+        : `<div class="flex items-start gap-2 text-[13px]"><i data-lucide="alert-triangle" class="w-4 h-4 text-warn mt-0.5"></i><div>Il cert servito esternamente <strong>non corrisponde</strong> a nessun secret della scansione attuale. Possibili cause: cert gestito da un nginx esterno, secret aggiornato dopo la scan, o context kubectl puntato a un cluster diverso.</div></div>`}
+    </div>`;
+    lucide.createIcons({icons:lucide.icons, attrs:{}});
+  } catch (e) {
+    res.innerHTML = `<div class="card p-5 text-bad text-[13px]">${_esc(e.message)}</div>`;
+  }
 });
 
 /* ============================================================
-   POPOVERS (notifiche · info · user)
+   HOW-TO RENDERER (riusato dal design Polaris)
    ============================================================ */
-function closeAllPopovers(except) {
-  $$('.popover').forEach(p => { if (p !== except) p.classList.add('hidden'); });
-  $$('[aria-haspopup]').forEach(b => b.setAttribute('aria-expanded','false'));
+async function renderHowTo() {
+  const target = $('#howto-body'); if (!target || target.dataset.loaded) return;
+  let text = '# HOW-TO non disponibile.';
+  try { const r = await fetch(`${API}/api/howto`); const j = await r.json(); text = j.content || text; } catch {}
+  target.innerHTML = parseHowTo(text); target.dataset.loaded = '1';
+  lucide.createIcons({icons:lucide.icons, attrs:{}});
 }
-function wirePopover(btnId, popId) {
-  const btn = $('#'+btnId), pop = $('#'+popId);
-  if (!btn || !pop) return;
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const willOpen = pop.classList.contains('hidden');
-    closeAllPopovers(willOpen ? pop : null);
-    pop.classList.toggle('hidden', !willOpen);
-    btn.setAttribute('aria-expanded', String(willOpen));
-    if (willOpen && popId === 'pop-settings') checkBackend();
-  });
-}
-wirePopover('btn-notif', 'pop-notif');
-wirePopover('btn-settings', 'pop-settings');
-wirePopover('btn-user', 'pop-user');
-document.addEventListener('click', (e) => {
-  if (e.target.closest('[data-pop-close]')) { closeAllPopovers(null); return; }
-  if (!e.target.closest('.popover') && !e.target.closest('[aria-haspopup]')) closeAllPopovers(null);
-});
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllPopovers(null); });
-$('#notif-clear')?.addEventListener('click', (e) => { e.stopPropagation(); state.notifCleared = Date.now(); renderNotifications(state.jobs); });
-
-function renderNotifications(jobs) {
-  const list = $('#notif-list'), badge = $('#notif-badge');
-  if (!list) return;
-  const cutoff = state.notifCleared || 0;
-  const items = (jobs || [])
-    .filter(j => j.finishedAt && j.finishedAt > cutoff && (j.status === 'success' || j.status === 'failed'))
-    .slice().reverse().slice(0, 8);
-  if (!items.length) {
-    list.innerHTML = '<div class="px-4 py-6 text-center text-[12px] text-fg-mute">Nessuna notifica</div>';
-  } else {
-    list.innerHTML = items.map(j => {
-      const l = actionLabel(j.action);
-      const ok = j.status === 'success';
-      const ic = ok ? 'check-circle-2' : 'alert-circle';
-      const col = ok ? '#3fb87a' : '#e25555';
-      return `<div class="px-4 py-2.5 border-b border-rule flex items-start gap-2.5">
-        <i data-lucide="${ic}" class="w-4 h-4 shrink-0 mt-0.5" style="color:${col}"></i>
-        <div class="min-w-0 flex-1">
-          <div class="text-[12.5px] text-fg">${_esc(l.name)} <span class="text-fg-mute">${ok ? 'completato' : 'fallito'}</span></div>
-          <div class="text-[11px] text-fg-dim">${_esc(l.type)} · ${fmtRel(j.finishedAt)}</div>
-        </div>
-      </div>`;
-    }).join('');
+function parseHowTo(text) {
+  const lines = text.split('\n'), out = []; let i=0, para=[], code=[]; const esc=escapeHTML;
+  const flushPara = () => { if(!para.length)return; out.push(`<p class="text-[13.5px] text-fg leading-[1.7] my-3">${para.join(' ')}</p>`); para=[]; };
+  const flushCode = () => { if(!code.length)return; out.push(`<pre class="font-mono text-[12.5px] leading-[1.65] my-3 px-4 py-3 rounded-md overflow-x-auto whitespace-pre" style="background:#070a0f;border:1px solid #1f2733;color:#cdd6df">${code.join('\n')}</pre>`); code=[]; };
+  const flushAll = () => { flushPara(); flushCode(); };
+  while (i < lines.length) {
+    const line = lines[i]; const t = line.trim();
+    if (!t) { flushAll(); i++; continue; }
+    if (/^-{10,}$/.test(t)) {
+      flushAll(); i++; while(i<lines.length && !lines[i].trim()) i++;
+      if (i<lines.length) { out.push(`<h2 class="text-[17px] font-semibold mt-10 mb-4 pb-2.5 border-b border-rule">${esc(lines[i].trim())}</h2>`); i++; if (i<lines.length && /^-{10,}$/.test(lines[i].trim())) i++; }
+      continue;
+    }
+    if (/^STEP\s+\d+/i.test(t)) {
+      flushAll(); const m = t.match(/^(STEP\s+\d+)\s*[—\-:]?\s*(.*)$/i);
+      out.push(`<div class="mt-5 mb-3 flex items-baseline gap-3"><span class="badge badge-info shrink-0"><span class="dot"></span>${esc(m?m[1]:t)}</span><span class="text-[13px] font-medium text-fg">${esc(m?m[2]:'')}</span></div>`);
+      i++; continue;
+    }
+    if (/^ {4,}\S/.test(line)) { flushPara(); code.push(esc(line.replace(/^ {4}/,''))); i++; continue; }
+    para.push(esc(t)); i++;
   }
-  const failed = (jobs || []).filter(j => j.status === 'failed' && j.finishedAt && j.finishedAt > cutoff).length;
-  if (failed > 0) { badge.textContent = String(failed); badge.classList.remove('hidden'); }
-  else badge.classList.add('hidden');
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
+  flushAll(); return out.join('\n');
 }
+
+/* ============================================================
+   POPOVERS + MISC
+   ============================================================ */
+function closeAllPopovers(except) { $$('.popover').forEach(p => { if (p !== except) p.classList.add('hidden'); }); $$('[aria-haspopup]').forEach(b => b.setAttribute('aria-expanded','false')); }
+function wirePopover(btnId, popId) {
+  const btn = $('#'+btnId), pop = $('#'+popId); if (!btn || !pop) return;
+  btn.addEventListener('click', e => { e.stopPropagation(); const willOpen = pop.classList.contains('hidden'); closeAllPopovers(willOpen?pop:null); pop.classList.toggle('hidden', !willOpen); btn.setAttribute('aria-expanded', String(willOpen)); if (willOpen && popId==='pop-settings') checkBackend(); });
+}
+wirePopover('btn-settings','pop-settings'); wirePopover('btn-user','pop-user');
+document.addEventListener('click', e => { if (e.target.closest('[data-pop-close]')) { closeAllPopovers(null); return; } if (!e.target.closest('.popover') && !e.target.closest('[aria-haspopup]')) closeAllPopovers(null); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAllPopovers(null); });
+
 async function checkBackend() {
   const el = $('#settings-backend'); if (!el) return;
   el.textContent = 'checking…'; el.style.color = '';
-  try {
-    const r = await fetch(API + '/api/output?since=0', { cache:'no-store' });
-    if (r.ok) { el.textContent = 'connesso'; el.style.color = '#3fb87a'; }
-    else { el.textContent = 'errore ' + r.status; el.style.color = '#e25555'; }
-  } catch { el.textContent = 'offline'; el.style.color = '#e25555'; }
+  try { const r = await fetch(API+'/api/output?since=0', {cache:'no-store'}); if (r.ok) { el.textContent='connesso'; el.style.color='#3fb87a'; } else { el.textContent='errore '+r.status; el.style.color='#e25555'; } } catch { el.textContent='offline'; el.style.color='#e25555'; }
 }
 
-/* ============================================================
-   SYNTAX HIGHLIGHT (YAML / Bash / INI)
-   ============================================================ */
-function syntaxHighlight(code, ext) {
-  const isYaml = ext === 'yml' || ext === 'yaml';
-  const isBash = ext === 'sh' || ext === 'bash';
-  const isIni  = ext === 'ini' || ext === 'cfg';
-  return code.split('\n').map(line => {
-    const e = escapeHTML(line);
-    if (isYaml) return hlYaml(e);
-    if (isBash) return hlBash(e);
-    if (isIni)  return hlIni(e);
-    return e;
-  }).join('\n');
-}
-function hlYaml(e) {
-  if (/^\s*#/.test(e)) return `<span class="hl-cmt">${e}</span>`;
-  if (/\$ANSIBLE_VAULT/.test(e)) return `<span class="hl-enc">${e}</span>`;
-  return e
-    .replace(/^(\s*-?\s*)([\w][\w.\-\/]*)(\s*:)/, (_,sp,k,c) => `${sp}<span class="hl-key">${k}</span><span style="opacity:.5">${c}</span>`)
-    .replace(/(["'])([^'"]*)\1/g, m => `<span class="hl-str">${m}</span>`)
-    .replace(/\b(true|false|yes|no|null|never|always)\b/g, m => `<span class="hl-num">${m}</span>`);
-}
-function hlBash(e) {
-  if (/^\s*#/.test(e)) return `<span class="hl-cmt">${e}</span>`;
-  return e
-    .replace(/^(\s*)(echo|helm|kubectl|set|if|fi|else|then|for|do|done|bash|source|exit|ansible|ansible-playbook)\b/, (_,sp,kw) => `${sp}<span class="hl-kw">${kw}</span>`)
-    .replace(/(["'])([^'"]*)\1/g, m => `<span class="hl-str">${m}</span>`);
-}
-function hlIni(e) {
-  if (/^\s*[#;]/.test(e)) return `<span class="hl-cmt">${e}</span>`;
-  if (/^\s*\[.*\]\s*$/.test(e)) return `<span class="hl-kw">${e}</span>`;
-  return e.replace(/^(\s*[\w.\-]+)(\s*=)/, (_,k,c) => `<span class="hl-key">${k}</span><span style="opacity:.5">${c}</span>`);
-}
-
-/* ============================================================
-   HOW-TO RENDERER
-   ============================================================ */
-async function renderHowTo() {
-  const target = $('#howto-body');
-  if (!target || target.dataset.loaded) return;
-  target.innerHTML = '<div class="text-fg-mute text-[13px]">Caricamento HOW-TO…</div>';
-  let text = '# HOW-TO non disponibile.';
-  try { const r = await fetch(`${API}/api/howto`); const j = await r.json(); text = j.content || text; } catch (e) {}
-  target.innerHTML = parseHowTo(text);
-  target.dataset.loaded = '1';
-  lucide.createIcons({ icons: lucide.icons, attrs:{} });
-}
-function parseHowTo(text) {
-  const lines = text.split('\n');
-  const out = []; let i = 0; let para = [], code = [];
-  const esc = escapeHTML;
-  const flushPara = () => { if (!para.length) return; out.push(`<p class="text-[13.5px] text-fg leading-[1.7] my-3">${para.join(' ')}</p>`); para = []; };
-  const flushCode = () => {
-    if (!code.length) return;
-    const joined = code.join('\n');
-    out.push(`<div class="my-3 relative group"><pre class="font-mono text-[12.5px] leading-[1.65] px-4 py-3 rounded-md overflow-x-auto whitespace-pre" style="background:#070a0f; border:1px solid #1f2733; color:#cdd6df">${joined}</pre><button class="icon-btn !w-7 !h-7 absolute top-2 right-2 opacity-0 group-hover:opacity-100" data-copy="${esc(code.join('\n')).replace(/"/g,'&quot;')}" title="Copia"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>`);
-    code = [];
-  };
-  const flushAll = () => { flushPara(); flushCode(); };
-  while (i < lines.length) {
-    const line = lines[i]; const trimmed = line.trim();
-    if (!trimmed) { flushAll(); i++; continue; }
-    if (/^-{10,}$/.test(trimmed)) {
-      flushAll(); i++;
-      while (i < lines.length && !lines[i].trim()) i++;
-      if (i < lines.length) {
-        out.push(`<h2 class="text-[17px] font-semibold mt-10 mb-4 pb-2.5 border-b border-rule">${esc(lines[i].trim())}</h2>`);
-        i++; if (i < lines.length && /^-{10,}$/.test(lines[i].trim())) i++;
-      }
-      continue;
-    }
-    if (/^===/.test(trimmed)) {
-      flushAll();
-      const title = trimmed.replace(/^===\s*/, '').replace(/\s*===\s*$/, '');
-      out.push(`<h3 class="text-[14px] font-semibold mt-7 mb-3" style="color:#e8a838">${esc(title)}</h3>`);
-      i++; continue;
-    }
-    if (/^STEP\s+\d+/i.test(trimmed)) {
-      flushAll();
-      const m = trimmed.match(/^(STEP\s+\d+)\s*[—\-:]?\s*(.*)$/i);
-      const step = m ? m[1] : trimmed; const rest = m ? m[2] : '';
-      out.push(`<div class="mt-5 mb-3 flex items-baseline gap-3"><span class="badge badge-info shrink-0"><span class="dot"></span>${esc(step)}</span><span class="text-[13px] font-medium text-fg">${esc(rest)}</span></div>`);
-      i++; continue;
-    }
-    if (/^(IMPORTANTE|NOTA|ATTENZIONE)/i.test(trimmed)) {
-      flushAll();
-      const head = trimmed; const body = [], codeIn = []; i++;
-      while (i < lines.length && lines[i].trim()) {
-        const l = lines[i];
-        if (/^ {4,}\S/.test(l)) codeIn.push(esc(l.replace(/^ {4}/, '')));
-        else body.push(esc(l.trim()));
-        i++;
-      }
-      let inner = `<div class="font-semibold mb-1" style="color:#f3bb5a">${esc(head)}</div>`;
-      if (body.length) inner += `<div class="text-fg leading-relaxed">${body.join(' ')}</div>`;
-      if (codeIn.length) inner += `<pre class="font-mono text-[12px] mt-2 px-3 py-2 rounded overflow-x-auto whitespace-pre" style="background:rgba(0,0,0,.35); color:#f3bb5a">${codeIn.join('\n')}</pre>`;
-      out.push(`<div class="my-4 p-4 rounded-md flex gap-3" style="background:rgba(232,168,56,.07); border:1px solid rgba(232,168,56,.35)"><i data-lucide="alert-circle" class="w-4 h-4 shrink-0 mt-0.5" style="color:#e8a838"></i><div class="text-[13px] flex-1 min-w-0">${inner}</div></div>`);
-      continue;
-    }
-    if (/^ {4,}\S/.test(line)) { flushPara(); code.push(esc(line.replace(/^ {4}/, ''))); i++; continue; }
-    if (trimmed.length < 70 && /[:?]$/.test(trimmed) && !/^[a-z]/.test(trimmed)) {
-      flushAll();
-      out.push(`<div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-mute mt-4 mb-1.5">${esc(trimmed.replace(/[:?]\s*$/, ''))}</div>`);
-      i++; continue;
-    }
-    para.push(esc(trimmed)); i++;
-  }
-  flushAll();
-  return out.join('\n');
-}
-
-/* ============================================================
-   TERMINAL RESIZE
-   ============================================================ */
-let _resize = null;
-document.addEventListener('mousedown', e => {
-  const h = e.target.closest('.resize-handle');
-  if (!h) return;
-  e.preventDefault();
-  const panel = h.nextElementSibling;
-  _resize = { h, panel, x0: e.clientX, w0: panel.offsetWidth };
-  h.classList.add('dragging');
-  document.body.classList.add('resizing');
-});
-document.addEventListener('mousemove', e => {
-  if (!_resize) return;
-  const delta = _resize.x0 - e.clientX;
-  const newW = Math.min(900, Math.max(280, _resize.w0 + delta));
-  _resize.panel.style.width = newW + 'px';
-});
-document.addEventListener('mouseup', () => {
-  if (!_resize) return;
-  _resize.h.classList.remove('dragging');
-  document.body.classList.remove('resizing');
-  _resize = null;
-});
+$('#btn-scan')?.addEventListener('click', () => triggerScan(state.ctx));
+$('#btn-cluster-scan')?.addEventListener('click', () => triggerScan(state.ctx));
+$('#btn-refresh')?.addEventListener('click', () => { const ic=$('#btn-refresh').querySelector('svg,i'); if(ic){ic.style.transition='transform 600ms ease-out';ic.style.transform='rotate(360deg)';setTimeout(()=>ic.style.transform='',700);} loadContexts(); loadLastScan(); pollOutput(); });
+$('#hamburger')?.addEventListener('click', () => $('#sidebar').classList.toggle('hidden'));
 
 /* ============================================================
    BOOT
    ============================================================ */
-loadJobs();
-lucide.createIcons({ icons: lucide.icons, attrs:{} });
+lucide.createIcons({icons:lucide.icons, attrs:{}});
 route();
-setRunningStatus('idle');
-loadProjects();
+setStatus('idle');
+loadContexts();
+loadLastScan();
 </script>
 </body>
 </html>

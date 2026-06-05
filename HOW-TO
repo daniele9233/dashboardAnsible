@@ -1,118 +1,138 @@
-Polaris · Ansible Control Plane
+Polaris · Cert Inspector
 
-Una console web per eseguire i tuoi playbook Ansible. Ogni repository GitHub
-e' un "progetto": lo cloni in locale, ne ispezioni inventory e file, lanci un
-dry-run e infine applichi il playbook agli host reali. L'output del comando e'
-mostrato live nel terminale a destra e nella tab Activity Log.
+Dashboard read-only di diagnostica certificati per cluster Kubernetes e
+Rancher. Estrae i certificati dai secret TLS, dagli Ingress e dal setting
+`cacerts` di Rancher; li analizza con OpenSSL; ti segnala scadenze, CA
+mismatch e cert "sparsi"; e per ogni anomalia ti dice COSA fare e su QUALE
+VM lanciare il comando.
 
 
 --------------------------------------------------------------------------
-Avvio della dashboard
+Avvio
 --------------------------------------------------------------------------
 
-La dashboard e' un'app Flask che gira sul tuo controller Ansible (la macchina
-da cui esegui i playbook). Per avviarla:
+Sul controller (la macchina su cui c'e' kubectl configurato per i tuoi
+cluster Rancher/downstream):
 
     ./start.sh
 
-Poi apri http://localhost:8080. Da remoto, usa un tunnel SSH:
+La dashboard parte su http://localhost:8090. Da remoto:
 
-    ssh -L 8080:localhost:8080 <user>@<controller-ip>
+    ssh -L 8090:localhost:8090 <user>@<controller-ip>
 
-Se manca Flask, start.sh prova a installarlo. Su Debian/Ubuntu (PEP 668) il
-modo pulito e':
-
-    apt install -y python3-flask
-
-NOTA La dashboard esegue git e ansible-playbook sul controller. Assicurati che
-ansible e git siano installati (nel PATH) e che il controller abbia accesso
-SSH agli host degli inventory.
+Requisiti sul controller:
+    - python3, pip
+    - flask  (start.sh prova ad installarlo via apt python3-flask)
+    - kubectl con uno o piu' context gia' configurati
+    - openssl  (di solito presente di default)
 
 
 --------------------------------------------------------------------------
-STEP 1 — Clona un progetto
+STEP 1 — Seleziona il context
 --------------------------------------------------------------------------
 
-Vai su Progetti. Ogni card e' un repository Ansible. Clicca "Clona" per
-scaricarlo in locale (cartella ANSIBLE_PROJECTS_DIR, default ~/ansible-projects).
-Se il repo e' gia' clonato, il bottone diventa "Pull" e aggiorna il codice.
-
-L'output di git clone/pull scorre nella tab Activity Log.
-
-
---------------------------------------------------------------------------
-STEP 2 — Scegli il progetto attivo
---------------------------------------------------------------------------
-
-Il selettore "Progetto" in alto a destra imposta il progetto su cui operano le
-pagine Deploy, Dry-Run, Controlli, Inventory e File. Puoi anche cliccare
-"Rendi attivo" su una card della pagina Progetti.
+Il selettore "Context" in alto a destra elenca tutti i context kubectl
+configurati. Scegli quello del cluster da analizzare (es. il cluster local
+di Rancher, oppure un downstream). Niente kubeconfig speciali: la dashboard
+usa quello che hai gia'.
 
 
 --------------------------------------------------------------------------
-STEP 3 — Ispeziona inventory e file
+STEP 2 — Scansiona
 --------------------------------------------------------------------------
 
-Inventory mostra i gruppi e gli host letti dal file inventory del repo.
-File permette di sfogliare playbook, inventory, group_vars e i task dei roles.
+Clicca "Scansiona". L'output scorre nella tab Activity Log. La scansione fa:
 
+    kubectl get secret -A -o json    -> filtra cert da tls.crt/ca.crt/cacerts.pem
+    kubectl get ingress -A -o json   -> estrae spec.tls e gli host
+    kubectl get setting.management.cattle.io cacerts/server-url
+                                     -> CA pubblicata da Rancher (se installato)
 
---------------------------------------------------------------------------
-STEP 4 — Controlli (non distruttivi)
---------------------------------------------------------------------------
-
-La pagina Controlli esegue verifiche che non modificano gli host:
-
-    Syntax check   ansible-playbook <pb> --syntax-check
-    Ping           ansible <group|all> -m ping
-    Lista task     ansible-playbook <pb> --list-tasks
-    Lista host     ansible-playbook <pb> --list-hosts
+Per ogni certificato parsa subject, issuer, SAN, scadenza, fingerprint, EKU,
+CA basicConstraints e self-signed.
 
 
 --------------------------------------------------------------------------
-STEP 5 — Dry-Run
+STEP 3 — Leggi la Dashboard
 --------------------------------------------------------------------------
 
-La pagina Dry-Run esegue il playbook in modalita' check:
+Quattro contatori in cima:
+    CERTS     totale certificati trovati
+    SCADUTI   notAfter precedente a oggi
+    ≤30G      cert in scadenza nei prossimi 30 giorni
+    ALERT     anomalie rilevate (con remediation)
 
-    ansible-playbook <playbook> -i <inventory> --check --diff
-
-Mostra i cambiamenti che VERREBBERO applicati, senza toccare gli host. Usa il
-selettore Host group per limitare l'esecuzione a un singolo gruppo (--limit).
-
-ATTENZIONE alcuni task con condizioni dinamiche possono comportarsi in modo
-diverso in check mode rispetto a un'esecuzione reale.
-
-
---------------------------------------------------------------------------
-STEP 6 — Deploy
---------------------------------------------------------------------------
-
-La pagina Deploy applica il playbook agli host reali:
-
-    ansible-playbook <playbook> -i <inventory> [--limit <gruppo>]
-
-Le modifiche sono reali. Lancia sempre prima un Dry-Run.
+Sotto, il "Breakdown esposizione" (ingress, interni, CA) e le anomalie
+principali. Per la lista completa apri "Anomalie & fix".
 
 
 --------------------------------------------------------------------------
-Progetti configurati
+STEP 4 — Anomalie & fix
 --------------------------------------------------------------------------
 
-    microceph   MicroCeph a 3 nodi con OSD su loop device e CephFS (subdir ansible/)
-    kafka       Kafka + Zookeeper (inventory in inventories/)
-    patroni     PostgreSQL 15 HA con Patroni, etcd, PgBouncer
-    rke2        Cluster RKE2 + Rancher v5, NFS, pgAdmin, Nginx, Prometheus
+Per ogni anomalia, la dashboard mostra:
+    - severita' (error/warn/info)
+    - dettaglio del problema
+    - dove agire: la VM giusta (Rancher VM vs Control-plane VM) e il context
+      kubectl
+    - i comandi consigliati (con copia rapida)
 
-Per aggiungere un nuovo repository basta inserire una voce nella lista PROJECTS
-in app.py (key, repo, playbook, inventory, host groups, roles).
+Le anomalie tipiche che individua:
+
+    EXPIRED            certificato scaduto
+    EXPIRING ≤30g      scadenza imminente
+    CA MISMATCH        Rancher cacerts ha un checksum diverso dal secret
+                       tls-ca: i cluster downstream perdono il trust
+    LEAF ISSUER vs CA  il cert tls-rancher-ingress e' firmato da una CA
+                       diversa da quella pubblicata in cacerts (tipico
+                       quando si aggiorna il cert dimenticandosi la CA)
+    INGRESS SECRET     un Ingress referenzia un secret TLS che non esiste
+                       MISSING
+    ORPHAN SECRET      secret TLS non riferito da alcun Ingress: spesso
+                       "cert sparso" su un servizio esposto via LB
 
 
 --------------------------------------------------------------------------
-Note operative
+STEP 5 — Probe TLS esterno
 --------------------------------------------------------------------------
 
-Un solo job alla volta: clone, dry-run e deploy condividono la stessa coda. Se
-un job e' in esecuzione, attendi che finisca prima di lanciarne un altro.
+La pagina "Probe TLS esterno" apre un handshake TLS senza validare la chain
+e ti mostra il certificato realmente servito da un endpoint (es. l'nginx
+che sta davanti a Rancher). Confronta il fingerprint con i secret della
+scansione: se non corrisponde, hai un disallineamento tipico — il cert e'
+stato aggiornato in un solo posto (cluster oppure nginx) ma non
+nell'altro.
 
-Lo storico dei job e' salvato nel browser (localStorage), non sul server.
+
+--------------------------------------------------------------------------
+Su quale VM eseguire i comandi
+--------------------------------------------------------------------------
+
+La dashboard ti dice esplicitamente VM target per ogni anomalia. La regola
+generale che usa:
+
+    Secret cattle-system/tls-rancher-ingress  -> Rancher VM (kubectl al
+                                                  cluster local). Se davanti
+                                                  c'e' nginx esterno, ricordati
+                                                  di aggiornare anche QUELLO.
+
+    Secret cattle-system/tls-ca               -> Rancher VM. Allinea anche
+                                                  setting/cacerts.
+
+    Setting cacerts (CA mismatch)             -> Rancher VM, kubectl patch +
+                                                  restart cattle-cluster-agent
+                                                  sui downstream.
+
+    Tutti gli altri secret TLS                -> Control-plane VM del
+                                                  cluster a cui appartiene
+                                                  l'ingress.
+
+
+--------------------------------------------------------------------------
+Sicurezza
+--------------------------------------------------------------------------
+
+Polaris e' read-only: legge gli oggetti del cluster e mostra i comandi.
+Non applica modifiche al cluster. I PEM dei certificati non lasciano il
+controller (vengono parsati in-process). L'unica scrittura sul disco e'
+nel solo file di output del job in memoria (non persistito).

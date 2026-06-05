@@ -22,17 +22,18 @@ if ! python3 -c "import flask" 2>/dev/null; then
   fi
 fi
 
-# Cartella dove vengono clonati i repository Ansible gestiti dalla dashboard.
-export ANSIBLE_PROJECTS_DIR="${ANSIBLE_PROJECTS_DIR:-$HOME/ansible-projects}"
-
 # Porta (override: PORT=9000 ./start.sh)
 export PORT="${PORT:-8090}"
 
+KUBECTL=$(command -v kubectl || echo "non trovato")
+OPENSSL=$(command -v openssl || echo "non trovato")
+
 echo ""
-echo "  Polaris · Ansible Control Plane"
+echo "  Polaris · Cert Inspector"
 echo "  ─────────────────────────────────────────────"
 echo "  URL locale:     http://localhost:$PORT"
-echo "  Projects dir:   $ANSIBLE_PROJECTS_DIR"
+echo "  kubectl:        $KUBECTL"
+echo "  openssl:        $OPENSSL"
 echo ""
 echo "  Accesso da remoto (SSH tunnel):"
 echo "  ssh -L $PORT:localhost:$PORT <user>@<controller-ip>"
