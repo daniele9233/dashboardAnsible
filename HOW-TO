@@ -20,8 +20,8 @@ Poi apri http://localhost:8080. Da remoto, usa un tunnel SSH:
     ssh -L 8080:localhost:8080 <user>@<controller-ip>
 
 NOTA La dashboard esegue git e ansible-playbook sul controller. Assicurati che
-ansible sia installato (nel PATH o nel virtualenv ~/ansible-env) e che il
-controller abbia accesso SSH agli host degli inventory.
+ansible e git siano installati (nel PATH) e che il controller abbia accesso
+SSH agli host degli inventory.
 
 
 --------------------------------------------------------------------------

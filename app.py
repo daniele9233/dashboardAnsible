@@ -15,9 +15,6 @@ app = Flask(__name__)
 PROJECTS_DIR = os.path.abspath(
     os.environ.get('ANSIBLE_PROJECTS_DIR', os.path.expanduser('~/ansible-projects'))
 )
-# Virtualenv con ansible installato. Se l'activate non esiste, i comandi
-# vengono eseguiti comunque usando l'ansible presente nel PATH.
-VENV = os.path.expanduser(os.environ.get('ANSIBLE_VENV', '~/ansible-env'))
 
 # ---------------------------------------------------------------------------
 # Registro dei progetti Ansible.
@@ -145,29 +142,16 @@ def _safe_join(base, rel):
 # ---------------------------------------------------------------------------
 # Esecuzione comandi in background con streaming su _job_state['output'].
 # ---------------------------------------------------------------------------
-def _run(cmd_parts, cwd, use_venv=True):
+def _run(cmd_parts, cwd):
     try:
         env = os.environ.copy()
         env['ANSIBLE_FORCE_COLOR'] = '1'
         env['PYTHONUNBUFFERED'] = '1'
 
         quoted = ' '.join(shlex.quote(p) for p in cmd_parts)
-        activate = os.path.join(VENV, 'bin', 'activate')
-
-        if use_venv and os.path.exists(activate):
-            env['VIRTUAL_ENV'] = VENV
-            env['PATH'] = f'{VENV}/bin:' + env.get('PATH', '')
-            env.pop('PYTHONHOME', None)
-            shell_cmd = (
-                f'source {shlex.quote(activate)}'
-                f' && printf "\\033[2m[venv] %s\\033[0m\\n" "$(command -v ansible-playbook || echo ansible)"'
-                f' && exec {quoted}'
-            )
-        else:
-            shell_cmd = f'exec {quoted}'
 
         proc = subprocess.Popen(
-            ['bash', '-c', shell_cmd],
+            ['bash', '-c', f'exec {quoted}'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,
@@ -188,13 +172,13 @@ def _run(cmd_parts, cwd, use_venv=True):
         _job_lock.release()
 
 
-def _start_job(cmd_parts, cwd, use_venv=True):
+def _start_job(cmd_parts, cwd):
     """Acquisisce il lock e avvia _run in un thread. Ritorna (ok, errore)."""
     if not _job_lock.acquire(blocking=False):
         return False, 'Un job è già in esecuzione. Attendi il completamento.'
     _job_state['output'] = []
     _job_state['status'] = 'running'
-    t = threading.Thread(target=_run, args=(cmd_parts, cwd, use_venv), daemon=True)
+    t = threading.Thread(target=_run, args=(cmd_parts, cwd), daemon=True)
     t.start()
     return True, None
 
@@ -279,7 +263,7 @@ def api_project_clone():
         cmd = ['git', 'clone', '--branch', p['branch'], p['repo'], pdir]
         cwd = PROJECTS_DIR
 
-    ok, err = _start_job(cmd, cwd, use_venv=False)
+    ok, err = _start_job(cmd, cwd)
     if not ok:
         return jsonify({'error': err}), 409
     return jsonify({'status': 'started'})
@@ -320,7 +304,7 @@ def api_run():
         return jsonify({'error': f'Directory di lavoro mancante: {wd}'}), 409
 
     cmd = _build_command(p, op, limit)
-    ok, err = _start_job(cmd, wd, use_venv=True)
+    ok, err = _start_job(cmd, wd)
     if not ok:
         return jsonify({'error': err}), 409
     return jsonify({'status': 'started'})
