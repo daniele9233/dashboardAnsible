@@ -19,6 +19,11 @@ Poi apri http://localhost:8080. Da remoto, usa un tunnel SSH:
 
     ssh -L 8080:localhost:8080 <user>@<controller-ip>
 
+Se manca Flask, start.sh prova a installarlo. Su Debian/Ubuntu (PEP 668) il
+modo pulito e':
+
+    apt install -y python3-flask
+
 NOTA La dashboard esegue git e ansible-playbook sul controller. Assicurati che
 ansible e git siano installati (nel PATH) e che il controller abbia accesso
 SSH agli host degli inventory.
