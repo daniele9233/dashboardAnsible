@@ -1,0 +1,2727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1280" />
+<title>Polaris — Cluster Operations Platform</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><path d='M20,2L23,17L38,20L23,23L20,38L17,23L2,20L17,17Z' fill='%23e8a838'/></svg>" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        },
+        colors: {
+          ink: {
+            900: '#070a0f',
+            800: '#0a0e14',
+            700: '#11161d',
+            600: '#161d27',
+            500: '#1c2532',
+            400: '#243042',
+          },
+          rule: {
+            DEFAULT: '#1f2733',
+            strong:  '#2a3441',
+          },
+          fg: {
+            DEFAULT: '#e6edf3',
+            mute: '#8b96a3',
+            dim:  '#5d6773',
+            off:  '#3f4854',
+          },
+          brand: {
+            DEFAULT: '#e8a838',   // restrained amber — original, not Red Hat red
+            hi: '#f3bb5a',
+            lo: '#c48a1d',
+          },
+          ok:   '#3fb87a',
+          warn: '#e8a838',
+          bad:  '#e25555',
+          info: '#5aa6ed',
+          pend: '#6a7280',
+        },
+      }
+    }
+  }
+</script>
+
+<style>
+  html, body { background: #0a0e14; color: #e6edf3; font-family:'Space Grotesk', sans-serif; }
+  *::-webkit-scrollbar { width:10px; height:10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: #1f2733; border-radius: 6px; }
+  *::-webkit-scrollbar-thumb:hover { background: #2a3441; }
+
+  /* nav active accent — animated scaleY in */
+  .nav-item[aria-current="page"] {
+    background: #161d27;
+    color: #fafafa;
+  }
+  .nav-item[aria-current="page"]::before {
+    transform: scaleY(1);
+  }
+  .nav-item::before {
+    content:""; position:absolute; left:0; top:8px; bottom:8px; width:2px;
+    background:#e8a838; transform: scaleY(0); transform-origin: center;
+    transition: transform 180ms ease-out;
+  }
+  .nav-item:hover { color:#fafafa; background:#11161d; }
+
+  /* caret rotation */
+  details[open] > summary .caret { transform: rotate(90deg); }
+  summary { list-style: none; }
+  summary::-webkit-details-marker { display:none; }
+
+  /* progress ring — gauge style. The arc lives on ::before (masked to a thin
+     band) and a soft colored glow on ::after; the center label is a child,
+     rendered above the negative-z pseudos. --ring-val (0-100) + --ring-color
+     are animatable thanks to @property, so the ring fills in smoothly. */
+  @property --ring-val   { syntax: '<number>'; inherits: false; initial-value: 0; }
+  @property --ring-color { syntax: '<color>';  inherits: false; initial-value: #6a7280; }
+
+  .ring-prog { position: relative; isolation: isolate; }
+  /* the value arc (thin band, starts at 12 o'clock; unfilled = faint track) */
+  .ring-prog::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: 9999px; z-index: -1;
+    background: conic-gradient(from -90deg,
+        var(--ring-color) calc(var(--ring-val) * 1%), rgba(255,255,255,.07) 0);
+    -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 6px), #000 calc(100% - 5.5px));
+            mask: radial-gradient(closest-side, transparent calc(100% - 6px), #000 calc(100% - 5.5px));
+    transition: --ring-val .7s cubic-bezier(.4,0,.2,1), --ring-color .3s ease;
+  }
+  /* soft status-colored halo behind the ring */
+  .ring-prog::after {
+    content: "";
+    position: absolute; inset: 0; border-radius: 9999px; z-index: -2;
+    background: radial-gradient(circle, color-mix(in srgb, var(--ring-color) 22%, transparent), transparent 72%);
+    transition: background .3s ease;
+  }
+
+  /* status pulse */
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .pulse { animation: pulse-soft 1.5s ease-in-out infinite; }
+
+  /* gridded backdrop for the dashboard hero */
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+  }
+
+  /* form controls */
+  .field {
+    height:36px; background:#0a0e14; border:1px solid #1f2733;
+    border-radius:6px; padding:0 12px; color:#e6edf3; font-size:14px;
+    transition: border-color 150ms ease-out, background 150ms ease-out;
+    width:100%;
+  }
+  .field:focus { outline:none; border-color:#e8a838; }
+  .field::placeholder { color:#5d6773; }
+
+  .btn {
+    height:36px; padding:0 14px; border-radius:6px; font-weight:500;
+    font-size:13px; display:inline-flex; align-items:center; gap:8px;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+    border:1px solid transparent; white-space:nowrap;
+  }
+  .btn-primary { background:#e8a838; color:#0a0e14; height:40px; padding:0 18px; }
+  .btn-primary:hover { background:#f3bb5a; }
+  .btn-ghost   { background:transparent; color:#e6edf3; border-color:#2a3441; }
+  .btn-ghost:hover { border-color:#3f4854; background:#11161d; }
+  .btn-danger  { background:#e25555; color:#fff; }
+  .btn-danger:hover { background:#cf3f3f; }
+  .btn-sm { height:32px; padding:0 12px; font-size:12px; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* table */
+  .tbl { width:100%; border-collapse: collapse; }
+  .tbl th { text-align:left; font-weight:500; color:#8b96a3; font-size:11px;
+    text-transform:uppercase; letter-spacing:0.06em; padding:12px 16px; background:#11161d;
+    border-bottom:1px solid #1f2733; }
+  .tbl td { padding:14px 16px; font-size:13px; border-bottom:1px solid #1f2733; }
+  .tbl tr:hover td { background:#11161d; }
+  .tbl tr:last-child td { border-bottom:none; }
+
+  /* status badge */
+  .badge {
+    display:inline-flex; align-items:center; gap:6px; font-size:11px;
+    padding:3px 9px; border-radius:999px; font-weight:500;
+    border:1px solid transparent;
+  }
+  .badge .dot { width:6px; height:6px; border-radius:999px; }
+
+  .badge-ok   { color:#7dd9a4; background:rgba(63,184,122,.10); border-color:rgba(63,184,122,.25); }
+  .badge-ok   .dot { background:#3fb87a; }
+  .badge-run  { color:#f3bb5a; background:rgba(232,168,56,.10); border-color:rgba(232,168,56,.28); }
+  .badge-run  .dot { background:#e8a838; }
+  .badge-bad  { color:#f08c8c; background:rgba(226,85,85,.10); border-color:rgba(226,85,85,.25); }
+  .badge-bad  .dot { background:#e25555; }
+  .badge-pend { color:#9aa3ad; background:rgba(106,114,128,.12); border-color:rgba(106,114,128,.30); }
+  .badge-pend .dot { background:#6a7280; }
+  .badge-info { color:#9ec6f0; background:rgba(90,166,237,.10); border-color:rgba(90,166,237,.25); }
+  .badge-info .dot { background:#5aa6ed; }
+
+  /* terminal */
+  .term {
+    background:#070a0f; border:1px solid #1f2733; border-radius:8px;
+    font-family:'JetBrains Mono', monospace; font-size:12.5px; line-height:1.55;
+    color:#cdd6df;
+  }
+  .term-body { padding:14px 16px; height: 100%; overflow:auto; }
+
+  .copy-flash { color:#3fb87a !important; }
+
+  /* card */
+  .card {
+    background:#161d27; border:1px solid #1f2733; border-radius:8px;
+  }
+  .card-hover { transition: border-color 150ms ease-out, background 150ms ease-out; }
+  .card-hover:hover { border-color:#2a3441; background:#1c2532; }
+
+  /* section header label */
+  .section-label {
+    font-size:10px; letter-spacing:0.12em; text-transform:uppercase;
+    color:#5d6773; font-weight:600;
+  }
+
+  /* hard-cap small dashed divider */
+  .hairline { background: repeating-linear-gradient(90deg, #2a3441 0 6px, transparent 6px 12px); height:1px; }
+
+  /* breadcrumb chevron */
+  .crumb-sep::after { content:"›"; margin: 0 8px; color:#3f4854; }
+
+  /* uninstall modal */
+  .modal-back { backdrop-filter: blur(8px); background: rgba(7,10,15,0.7); }
+
+  /* ANSI tokens (parsed in JS) */
+  .a-blk{color:#5d6773} .a-red{color:#e25555} .a-grn{color:#3fb87a} .a-ylw{color:#e8a838}
+  .a-blu{color:#5aa6ed} .a-mag{color:#c084fc} .a-cyn{color:#22d3ee} .a-wht{color:#e6edf3}
+  .a-bld{font-weight:600} .a-dim{opacity:.6} .a-und{text-decoration:underline}
+
+  /* keyframe for chart fade */
+  @keyframes rise { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .rise { animation: rise 480ms ease-out both; }
+
+  /* segmented control */
+  .seg { display:inline-flex; padding:3px; background:#0a0e14; border:1px solid #1f2733; border-radius:8px; }
+  .seg button { padding:6px 14px; font-size:12px; font-weight:500; border-radius:5px; color:#8b96a3; transition: all 150ms ease-out; }
+  .seg button.on { background:#1c2532; color:#fafafa; }
+
+  /* code block */
+  .code {
+    font-family:'JetBrains Mono', monospace; font-size:12.5px;
+    background:#070a0f; border:1px solid #1f2733; border-radius:6px;
+    padding:12px 14px; color:#cdd6df; line-height:1.55;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+  }
+
+  .icon-btn {
+    width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center;
+    border-radius:6px; color:#8b96a3; transition: all 150ms ease-out; position:relative;
+  }
+  .icon-btn:hover { color:#fafafa; background:#161d27; }
+
+  /* resizable terminal panel handle */
+  .resize-handle {
+    width:5px; flex-shrink:0; cursor:col-resize; position:relative;
+    background:#0a0e14; border-left:1px solid #1f2733;
+    transition: background 150ms ease-out;
+  }
+  .resize-handle::after {
+    content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:3px; height:48px; border-radius:3px;
+    background:transparent; transition: background 150ms ease-out;
+  }
+  .resize-handle:hover::after, .resize-handle.dragging::after { background:#e8a838; }
+  .resize-handle.dragging { background:#0a0e14; }
+  body.resizing { cursor:col-resize !important; user-select:none !important; }
+
+  /* file viewer tab active */
+  .btn.fv-on { background:#1c2532; color:#fafafa; border-color:#3f4854; }
+
+  /* file viewer syntax highlight */
+  .hl-key{color:#5aa6ed} .hl-str{color:#3fb87a} .hl-cmt{color:#5d6773; font-style:italic}
+  .hl-kw{color:#22d3ee} .hl-num{color:#e8a838} .hl-enc{color:#e25555; opacity:.7}
+</style>
+</head>
+<body class="antialiased">
+
+<div class="flex min-h-screen">
+
+  <!-- ============== SIDEBAR ============== -->
+  <aside id="sidebar" class="w-64 shrink-0 border-r border-rule bg-ink-900 flex flex-col sticky top-0 h-screen">
+
+    <!-- Logo zone -->
+    <div class="px-5 py-5 border-b border-rule flex items-center gap-3">
+      <!-- Polaris — four-point pole star (original mark) -->
+      <div class="relative w-9 h-9">
+        <svg viewBox="0 0 40 40" class="w-9 h-9">
+          <defs>
+            <linearGradient id="logoG" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0" stop-color="#f3bb5a"/>
+              <stop offset="1" stop-color="#c48a1d"/>
+            </linearGradient>
+            <radialGradient id="logoGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stop-color="#e8a838" stop-opacity=".30"/>
+              <stop offset="1" stop-color="#e8a838" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <circle cx="20" cy="20" r="19" fill="url(#logoGlow)"/>
+          <path d="M20,2 L23.2,16.8 L38,20 L23.2,23.2 L20,38 L16.8,23.2 L2,20 L16.8,16.8 Z" fill="url(#logoG)"/>
+          <circle cx="20" cy="20" r="2.3" fill="#0a0e14"/>
+          <circle cx="31.5" cy="9" r="1.5" fill="#f3bb5a"/>
+        </svg>
+      </div>
+      <div class="leading-tight">
+        <div class="font-bold tracking-tight text-[15px]">Polaris</div>
+        <div class="text-[11px] font-light text-fg-mute -mt-0.5">Cluster Operations Platform</div>
+      </div>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+
+      <details open>
+        <summary class="flex items-center justify-between px-3 py-1 cursor-pointer">
+          <span class="section-label">Overview</span>
+          <i data-lucide="chevron-right" class="caret w-3 h-3 text-fg-dim transition-transform"></i>
+        </summary>
+        <ul class="mt-1 space-y-px">
+          <li><a href="#/dashboard" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="dashboard"><i data-lucide="home" class="w-4 h-4"></i>Dashboard</a></li>
+          <li><a href="#/stack" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="stack"><i data-lucide="boxes" class="w-4 h-4"></i>Stack</a></li>
+          <li><a href="#/activity" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="activity"><i data-lucide="square-terminal" class="w-4 h-4"></i>Activity Log</a></li>
+        </ul>
+      </details>
+
+      <details open>
+        <summary class="flex items-center justify-between px-3 py-1 cursor-pointer">
+          <span class="section-label">Operations</span>
+          <i data-lucide="chevron-right" class="caret w-3 h-3 text-fg-dim transition-transform"></i>
+        </summary>
+        <ul class="mt-1 space-y-px">
+          <li><a href="#/vault"     class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="vault"><i data-lucide="shield" class="w-4 h-4"></i>Vault</a></li>
+          <li><a href="#/dryrun"    class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="dryrun"><i data-lucide="flask-conical" class="w-4 h-4"></i>Dry-Run</a></li>
+          <li><a href="#/deploy"    class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="deploy"><i data-lucide="rocket" class="w-4 h-4"></i>Deploy</a></li>
+          <li><a href="#/uninstall" class="nav-item relative group flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute hover:!text-bad" data-route="uninstall"><i data-lucide="trash-2" class="w-4 h-4"></i>Uninstall</a></li>
+        </ul>
+      </details>
+
+      <details open>
+        <summary class="flex items-center justify-between px-3 py-1 cursor-pointer">
+          <span class="section-label">Access</span>
+          <i data-lucide="chevron-right" class="caret w-3 h-3 text-fg-dim transition-transform"></i>
+        </summary>
+        <ul class="mt-1 space-y-px">
+          <li><a href="#/ssh"    class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="ssh"><i data-lucide="key-round" class="w-4 h-4"></i>SSH Commands</a></li>
+        </ul>
+      </details>
+
+      <details open>
+        <summary class="flex items-center justify-between px-3 py-1 cursor-pointer">
+          <span class="section-label">Documentation</span>
+          <i data-lucide="chevron-right" class="caret w-3 h-3 text-fg-dim transition-transform"></i>
+        </summary>
+        <ul class="mt-1 space-y-px">
+          <li><a href="#/howto" class="nav-item relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-fg-mute" data-route="howto"><i data-lucide="book-open" class="w-4 h-4"></i>HOW-TO</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <div class="px-4 py-3 border-t border-rule text-[11px] text-fg-dim flex items-center justify-between">
+      <span>Polaris · v0.5.0</span>
+      <span class="inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>online</span>
+    </div>
+  </aside>
+
+  <!-- ============== MAIN ============== -->
+  <main class="flex-1 min-w-0 flex flex-col">
+
+    <!-- Top bar -->
+    <header class="h-16 sticky top-0 z-30 bg-ink-900 border-b border-rule flex items-center px-6 gap-4">
+      <button id="hamburger" class="icon-btn lg:hidden"><i data-lucide="menu" class="w-4 h-4"></i></button>
+
+      <div class="text-[13px] flex items-center" id="breadcrumb">
+        <span class="text-fg-mute">Console</span>
+        <span class="crumb-sep"></span>
+        <span class="text-fg crumb-active">Dashboard</span>
+      </div>
+
+      <div class="flex-1"></div>
+
+      <div class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-ink-700 border border-rule text-[12px] text-fg-mute">
+        <a href="https://github.com/daniele9233/ansible-aks" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1.5 hover:text-fg transition-colors" title="Open repository on GitHub">
+          <i data-lucide="github" class="w-3.5 h-3.5"></i>
+          <span>main</span>
+        </a>
+        <span class="mx-1 text-fg-off">·</span>
+        <span class="text-fg" id="cluster-name" title="kubectl current-context">cluster…</span>
+      </div>
+
+      <div class="flex items-center gap-0.5">
+        <button class="icon-btn" id="btn-refresh" title="Refresh"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+
+        <!-- Notifications -->
+        <div class="relative">
+          <button class="icon-btn relative" id="btn-notif" title="Notifications" aria-haspopup="true" aria-expanded="false">
+            <i data-lucide="bell" class="w-4 h-4"></i>
+            <span id="notif-badge" class="hidden absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-brand text-ink-900 text-[10px] font-semibold flex items-center justify-center">0</span>
+          </button>
+          <div id="pop-notif" class="popover hidden absolute right-0 mt-2 w-80 card z-50 overflow-hidden" style="box-shadow:0 16px 48px rgba(0,0,0,.55)">
+            <div class="px-4 py-3 border-b border-rule flex items-center justify-between">
+              <span class="font-medium text-[13px]">Notifications</span>
+              <button class="text-[11px] text-fg-mute hover:text-fg" id="notif-clear">Clear all</button>
+            </div>
+            <div id="notif-list" class="max-h-[320px] overflow-auto"></div>
+            <a href="#/activity" class="block px-4 py-2.5 text-[12px] text-brand hover:text-brand-hi border-t border-rule" data-pop-close>Open Activity Log →</a>
+          </div>
+        </div>
+
+        <!-- About / Settings -->
+        <div class="relative">
+          <button class="icon-btn" id="btn-settings" title="About Polaris" aria-haspopup="true" aria-expanded="false"><i data-lucide="settings" class="w-4 h-4"></i></button>
+          <div id="pop-settings" class="popover hidden absolute right-0 mt-2 w-72 card z-50 overflow-hidden" style="box-shadow:0 16px 48px rgba(0,0,0,.55)">
+            <div class="px-4 py-3 border-b border-rule">
+              <div class="font-medium text-[13px]">About Polaris</div>
+              <div class="text-[11px] text-fg-mute mt-0.5">Cluster Operations Platform</div>
+            </div>
+            <div class="px-4 py-3 text-[12px] space-y-2">
+              <div class="flex items-center justify-between"><span class="text-fg-mute">Version</span><span class="font-mono text-fg">v0.5.0</span></div>
+              <div class="flex items-center justify-between"><span class="text-fg-mute">Cluster</span><span class="font-mono text-fg" id="settings-cluster">cluster…</span></div>
+              <div class="flex items-center justify-between"><span class="text-fg-mute">Backend</span><span class="font-mono text-fg" id="settings-backend">checking…</span></div>
+            </div>
+            <a href="#/howto" class="flex items-center gap-2 px-4 py-2.5 text-[12px] text-brand hover:text-brand-hi border-t border-rule" data-pop-close><i data-lucide="book-open" class="w-3.5 h-3.5"></i>Open documentation</a>
+          </div>
+        </div>
+
+        <!-- User -->
+        <div class="relative">
+          <button class="ml-1 w-9 h-9 rounded-full bg-ink-500 border border-rule flex items-center justify-center text-[12px] font-semibold tracking-wide hover:border-rule-strong" id="btn-user" aria-haspopup="true" aria-expanded="false">DP</button>
+          <div id="pop-user" class="popover hidden absolute right-0 mt-2 w-64 card z-50 overflow-hidden" style="box-shadow:0 16px 48px rgba(0,0,0,.55)">
+            <div class="px-4 py-3 border-b border-rule flex items-center gap-3">
+              <div class="w-9 h-9 rounded-full bg-ink-500 border border-rule flex items-center justify-center text-[12px] font-semibold">DP</div>
+              <div class="min-w-0">
+                <div class="text-[13px] font-medium truncate">Daniele Pascolini</div>
+                <div class="text-[11px] text-fg-mute font-mono truncate">azureuser@controller</div>
+              </div>
+            </div>
+            <div class="px-4 py-2.5 text-[11px] text-fg-mute">Signed in via SSH tunnel · session local</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <div id="content" class="flex-1 min-w-0 bg-ink-800">
+      <!-- ============================================================== -->
+      <!-- DASHBOARD                                                        -->
+      <!-- ============================================================== -->
+      <section data-screen-label="01 Dashboard" data-screen="dashboard" class="p-8 max-w-[1400px] rise">
+
+        <div class="relative mb-8">
+          <div class="absolute inset-0 grid-bg opacity-50 -mx-8 -mt-8 -mb-4 rounded-b-lg" style="pointer-events:none"></div>
+          <div class="relative">
+            <div class="text-[11px] tracking-[0.15em] uppercase text-fg-dim mb-2">Operations · Production</div>
+            <h1 class="text-[26px] font-semibold leading-tight">Welcome back to Polaris</h1>
+            <p class="text-fg-mute mt-1 text-[14px]">Your fixed point over Azure Kubernetes — govern Rancher, storage and observability from a single control plane: vault, dry-run and apply playbooks against the live cluster.</p>
+          </div>
+        </div>
+
+        <!-- METRIC CARDS -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+
+          <!-- Cluster Status (live via /api/health) -->
+          <div class="card card-hover p-5">
+            <div class="flex items-start gap-4">
+              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0"
+                   id="health-nodes-ring" style="--ring-color:#6a7280; --ring-val:100">
+                <div class="text-center" id="health-nodes-center">
+                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">NODES</div>
+                  <div class="text-[15px] font-bold leading-none text-fg-mute">—</div>
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="section-label mb-1">Cluster Status</div>
+                <div class="text-[14px] font-medium" id="health-nodes-text">Checking…</div>
+                <div class="text-[12px] text-fg-mute mt-0.5" id="health-k8s">kubectl get nodes</div>
+                <a href="#/stack" class="inline-flex items-center gap-1 text-[12px] text-brand hover:text-brand-hi mt-2">View stack <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Last Operation -->
+          <div class="card card-hover p-5" id="card-last-op">
+            <div class="flex items-start gap-4">
+              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0"
+                   id="last-op-ring"
+                   style="--ring-color:#6a7280; --ring-val:100">
+                <div class="text-center" id="last-op-center">
+                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">JOB</div>
+                  <div class="text-[12.5px] font-bold leading-none text-fg-mute">IDLE</div>
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="section-label mb-1">Last Operation</div>
+                <div class="text-[14px] font-medium truncate" id="last-op-name">—</div>
+                <div class="text-[12px] text-fg-mute mt-0.5" id="last-op-time">no runs this session</div>
+                <a href="#/activity" class="inline-flex items-center gap-1 text-[12px] text-brand hover:text-brand-hi mt-2">Open log <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rancher version (live via /api/health) -->
+          <div class="card card-hover p-5">
+            <div class="flex items-start gap-4">
+              <div class="ring-prog w-[76px] h-[76px] rounded-full flex items-center justify-center shrink-0"
+                   id="health-rancher-ring" style="--ring-color:#6a7280; --ring-val:100">
+                <div class="text-center" id="health-rancher-center">
+                  <div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">IMAGE</div>
+                  <div class="text-[12.5px] font-bold leading-none text-fg-mute">—</div>
+                </div>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="section-label mb-1">Rancher</div>
+                <div class="text-[14px] font-medium" id="health-rancher-text">Checking…</div>
+                <div class="text-[12px] text-fg-mute mt-0.5" id="health-rancher-sub">cattle-system</div>
+                <a href="https://www.suse.com/suse-rancher/support-matrix/" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-[12px] text-brand hover:text-brand-hi mt-2">Support matrix <i data-lucide="external-link" class="w-3 h-3"></i></a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COMPONENT HEALTH STRIP (live via /api/health) -->
+        <div class="card mb-6">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-rule">
+            <div>
+              <h2 class="text-[15px] font-semibold">Component Health</h2>
+              <p class="text-[12px] text-fg-mute">Live status of the stack components — <span id="health-summary" class="text-fg">checking…</span></p>
+            </div>
+            <a href="#/stack" class="text-[12px] text-brand hover:text-brand-hi inline-flex items-center gap-1">Open Stack <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+          </div>
+          <div class="p-4 flex flex-wrap gap-2" id="health-pills">
+            <span class="text-[12px] text-fg-mute px-2 py-1">Loading component status…</span>
+          </div>
+        </div>
+
+        <!-- ACTIVITY CHART (hidden until the first real job of the session) -->
+        <div class="card mb-6 hidden" id="activity-chart-card">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-rule">
+            <div>
+              <h2 class="text-[15px] font-semibold">Recent Activity</h2>
+              <p class="text-[12px] text-fg-mute">Job outcomes for this session — green success, red failed</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="chart-range" class="field !w-auto !h-8 !text-[12px]"><option value="month">Past month</option><option value="week">Past week</option><option value="day">Past 24h</option></select>
+              <select id="chart-type" class="field !w-auto !h-8 !text-[12px]"><option value="all">All job types</option><option value="Deploy">Deploy</option><option value="Dry-Run">Dry-Run</option><option value="Vault">Vault</option></select>
+              <a href="#/activity" class="text-[12px] text-brand hover:text-brand-hi inline-flex items-center gap-1">Go to Activity <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+            </div>
+          </div>
+          <div class="p-6 pt-4">
+            <div class="h-[220px]"><canvas id="activityChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- RECENT JOBS -->
+        <div class="card">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-rule">
+            <div>
+              <h2 class="text-[15px] font-semibold">Recent Jobs</h2>
+              <p class="text-[12px] text-fg-mute">Persisted to <span class="font-mono">localStorage · aks-job-history</span></p>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="btn-clear-history"><i data-lucide="eraser" class="w-3.5 h-3.5"></i>Clear history</button>
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th class="w-24">ID</th>
+                <th>Name</th>
+                <th class="w-32">Status</th>
+                <th class="w-32">Type</th>
+                <th class="w-44">Finished</th>
+                <th class="w-10"></th>
+              </tr>
+            </thead>
+            <tbody id="jobs-tbody"></tbody>
+          </table>
+          <div id="jobs-empty" class="hidden px-6 py-12 text-center text-fg-mute text-[13px]">
+            No jobs yet — run a vault, dry-run or deploy action to populate this list.
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- STACK — component inventory                                       -->
+      <!-- ============================================================== -->
+      <section data-screen-label="01b Stack" data-screen="stack" class="p-8 max-w-[1400px] hidden rise">
+        <div class="flex items-start justify-between mb-6 gap-4">
+          <div>
+            <h1 class="text-[26px] font-semibold leading-tight">Stack</h1>
+            <p class="text-fg-mute mt-1 text-[14px]">Everything deployed on the cluster, live from <span class="font-mono text-fg">kubectl get deploy,ingress</span>. Mirrors the roles in <span class="font-mono text-fg">site.yml</span>.</p>
+          </div>
+          <button class="btn btn-ghost btn-sm shrink-0" id="btn-stack-refresh"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>Refresh</button>
+        </div>
+
+        <!-- Components table -->
+        <div class="card mb-6">
+          <div class="px-6 py-4 border-b border-rule flex items-center justify-between">
+            <h2 class="text-[15px] font-semibold">Components</h2>
+            <span class="text-[12px] text-fg-mute" id="stack-summary">—</span>
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th class="w-36">Status</th>
+                <th class="w-28">Version</th>
+                <th class="w-40">Namespace</th>
+                <th class="w-28 text-center">Replicas</th>
+                <th class="w-44">Endpoint</th>
+              </tr>
+            </thead>
+            <tbody id="stack-tbody">
+              <tr><td colspan="6" class="text-center text-fg-mute py-10">Loading components…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TLS Certificate exposing the Rancher console -->
+        <div class="card mb-6">
+          <div class="px-6 py-4 border-b border-rule flex items-center justify-between">
+            <h2 class="text-[15px] font-semibold">TLS Certificate</h2>
+            <span class="text-[12px] text-fg-mute">Rancher console · <span class="font-mono">cattle-system/tls-rancher-ingress</span></span>
+          </div>
+          <div id="stack-cert" class="p-6 text-[12px] text-fg-mute">Loading certificate…</div>
+        </div>
+
+        <!-- Storage (PersistentVolumes) -->
+        <div class="card">
+          <div class="px-6 py-4 border-b border-rule flex items-center justify-between">
+            <h2 class="text-[15px] font-semibold">Storage</h2>
+            <span class="text-[12px] text-fg-mute">PersistentVolumes · <span class="font-mono">kubectl get pv</span></span>
+          </div>
+          <div id="stack-storage" class="p-4 text-[12px] text-fg-mute">Loading volumes…</div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- ACTIVITY LOG                                                     -->
+      <!-- ============================================================== -->
+      <section data-screen-label="02 Activity" data-screen="activity" class="p-8 max-w-[1400px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">Activity Log</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Live terminal output streamed from <span class="font-mono text-fg">/api/output</span></p>
+        <div class="card flex flex-col" style="height: calc(100vh - 220px); min-height: 420px;">
+          <div class="px-5 py-3 border-b border-rule flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="badge" id="act-status"><span class="dot"></span><span class="t">idle</span></span>
+              <span class="text-[12px] text-fg-mute font-mono" id="act-lines">0 lines</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-ghost btn-sm" data-clear-term><i data-lucide="eraser" class="w-3.5 h-3.5"></i>Clear</button>
+              <button class="btn btn-ghost btn-sm" data-copy-term><i data-lucide="copy" class="w-3.5 h-3.5"></i>Copy</button>
+            </div>
+          </div>
+          <div class="term flex-1 min-h-0 !border-0 !rounded-none !bg-ink-900">
+            <div class="term-body" id="act-term"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- VAULT / DRYRUN / DEPLOY — share the operation layout              -->
+      <!-- ============================================================== -->
+      <section data-screen-label="03 Vault" data-screen="vault" class="hidden rise">
+        <div class="flex" style="min-height: calc(100vh - 64px);">
+          <div class="flex-1 min-w-0 p-8">
+            <h1 class="text-[26px] font-semibold leading-tight">Vault</h1>
+            <p class="text-fg-mute mt-1 mb-6 text-[14px]">Decrypt and inspect Ansible vault files. Read-only.</p>
+
+            <div class="card p-6 mb-4 max-w-[640px]">
+              <label class="text-[12px] font-medium text-fg-mute">Vault password</label>
+              <div class="relative mt-2">
+                <input type="password" class="field !pr-10 vault-pw" placeholder="Enter vault password" data-pw-for="vault" />
+                <button class="absolute right-2 top-1/2 -translate-y-1/2 icon-btn !w-7 !h-7" data-toggle-pw><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+              </div>
+              <p class="text-[11px] text-fg-dim mt-2">Required to decrypt vault.yml, vault_cavalid.yml, vault_storage.yml, vault_pgadmin.yml and vault_grafana.yml.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 max-w-[640px]">
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="w-9 h-9 rounded-md bg-ink-500 border border-rule flex items-center justify-center"><i data-lucide="file-key" class="w-4 h-4 text-brand"></i></div>
+                  <div>
+                    <div class="font-medium text-[14px]">vault.yml</div>
+                    <div class="text-[11px] text-fg-mute font-mono">group_vars/all/vault.yml</div>
+                  </div>
+                </div>
+                <p class="text-[12px] text-fg-mute mb-4">Master Ansible vault containing cluster secrets and SSH keys.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="vault_main" data-vault><i data-lucide="eye" class="w-4 h-4"></i>View vault.yml</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="w-9 h-9 rounded-md bg-ink-500 border border-rule flex items-center justify-center"><i data-lucide="file-key-2" class="w-4 h-4 text-info"></i></div>
+                  <div>
+                    <div class="font-medium text-[14px]">vault_cavalid.yml</div>
+                    <div class="text-[11px] text-fg-mute font-mono">group_vars/all/vault_cavalid.yml</div>
+                  </div>
+                </div>
+                <p class="text-[12px] text-fg-mute mb-4">CA-valid certificate bundle for the trusted Rancher deployment.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="vault_cavalid" data-vault><i data-lucide="eye" class="w-4 h-4"></i>View vault_cavalid.yml</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="w-9 h-9 rounded-md bg-ink-500 border border-rule flex items-center justify-center"><i data-lucide="hard-drive" class="w-4 h-4 text-warn"></i></div>
+                  <div>
+                    <div class="font-medium text-[14px]">vault_storage.yml</div>
+                    <div class="text-[11px] text-fg-mute font-mono">group_vars/all/vault_storage.yml</div>
+                  </div>
+                </div>
+                <p class="text-[12px] text-fg-mute mb-4">Azure Managed Disk identifiers (subscription, RG, disk name) for the static PV role.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="vault_storage" data-vault><i data-lucide="eye" class="w-4 h-4"></i>View vault_storage.yml</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="w-9 h-9 rounded-md bg-ink-500 border border-rule flex items-center justify-center"><i data-lucide="database" class="w-4 h-4 text-good"></i></div>
+                  <div>
+                    <div class="font-medium text-[14px]">vault_pgadmin.yml</div>
+                    <div class="text-[11px] text-fg-mute font-mono">group_vars/all/vault_pgadmin.yml</div>
+                  </div>
+                </div>
+                <p class="text-[12px] text-fg-mute mb-4">pgAdmin admin email and password for the web GUI (PostgreSQL external manager).</p>
+                <button class="btn btn-primary w-full justify-center" data-action="vault_pgadmin" data-vault><i data-lucide="eye" class="w-4 h-4"></i>View vault_pgadmin.yml</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="w-9 h-9 rounded-md bg-ink-500 border border-rule flex items-center justify-center"><i data-lucide="bar-chart-3" class="w-4 h-4" style="color:#f3bb5a"></i></div>
+                  <div>
+                    <div class="font-medium text-[14px]">vault_grafana.yml</div>
+                    <div class="text-[11px] text-fg-mute font-mono">group_vars/all/vault_grafana.yml</div>
+                  </div>
+                </div>
+                <p class="text-[12px] text-fg-mute mb-4">Grafana admin user and password for the observability dashboard.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="vault_grafana" data-vault><i data-lucide="eye" class="w-4 h-4"></i>View vault_grafana.yml</button>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm mt-5" data-open-files="vault"><i data-lucide="file-code-2" class="w-3.5 h-3.5"></i>View source files</button>
+          </div>
+          <div class="resize-handle" title="Trascina per ridimensionare"></div>
+          <div data-term-slot class="shrink-0 bg-ink-900 sticky top-16 self-start" style="width:480px; height: calc(100vh - 64px);">
+            <!-- terminal panel injected by JS -->
+          </div>
+        </div>
+      </section>
+
+      <section data-screen-label="04 Dry-Run" data-screen="dryrun" class="hidden rise">
+        <div class="flex" style="min-height: calc(100vh - 64px);">
+          <div class="flex-1 min-w-0 p-8">
+            <h1 class="text-[26px] font-semibold leading-tight">Dry-Run</h1>
+            <p class="text-fg-mute mt-1 mb-6 text-[14px]">Run the playbook in <span class="font-mono">--check --diff</span> mode. Nothing is applied to the cluster.</p>
+
+            <div class="card p-6 mb-4 max-w-[640px]">
+              <label class="text-[12px] font-medium text-fg-mute">Vault password</label>
+              <div class="relative mt-2">
+                <input type="password" class="field !pr-10 vault-pw" placeholder="Enter vault password" data-pw-for="dryrun" />
+                <button class="absolute right-2 top-1/2 -translate-y-1/2 icon-btn !w-7 !h-7" data-toggle-pw><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+              </div>
+            </div>
+
+            <!-- ============== VIA MAESTRA: DRY-RUN FULL STACK ============== -->
+            <div class="card card-hover p-6 max-w-[640px] mb-4" style="border-color: rgba(63,184,122,.40); background: linear-gradient(135deg, rgba(63,184,122,.05), transparent 65%)">
+              <div class="flex items-start gap-4">
+                <div class="w-11 h-11 rounded-md flex items-center justify-center shrink-0" style="background:rgba(63,184,122,.10); border:1px solid rgba(63,184,122,.30)">
+                  <i data-lucide="layers" class="w-5 h-5" style="color:#7dd9a4"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <div class="font-semibold text-[15px]">Dry-Run · Full stack</div>
+                    <span class="badge badge-ok"><span class="dot"></span>via maestra</span>
+                    <span class="badge badge-info"><span class="dot"></span>ansible-playbook site.yml --check --diff</span>
+                  </div>
+                  <p class="text-[12.5px] text-fg-mute mt-1">Simulate the full stack install in one shot: pre-check + Traefik + Rancher CA-Valid + Static PV (Azure Disk) + pgAdmin 4. Single vault prompt, single playbook, order enforced by <span class="font-mono">site.yml</span>.</p>
+                  <button class="btn btn-primary w-full justify-center mt-4" data-action="dryrun_all" data-vault><i data-lucide="flask-conical" class="w-4 h-4"></i>Run dry-run · Full stack</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 max-w-[640px]">
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="badge badge-info"><span class="dot"></span>tag: rancher_ca_valid</span>
+                </div>
+                <div class="font-medium text-[14px] mb-1">CA-Valid mode</div>
+                <p class="text-[12px] text-fg-mute mb-4">Simulate Rancher install with corporate CA certificates (trusted chain).</p>
+                <button class="btn btn-primary w-full justify-center" data-action="dryrun_ca_valid" data-vault><i data-lucide="flask-conical" class="w-4 h-4"></i>Run dry-run</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="badge badge-info"><span class="dot"></span>site-self-signed.yml</span>
+                </div>
+                <div class="font-medium text-[14px] mb-1">Self-Signed mode</div>
+                <p class="text-[12px] text-fg-mute mb-4">Simulate Rancher install with its own self-signed cert (cert-manager). Separate playbook from <span class="font-mono">site.yml</span>.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="dryrun_self" data-vault><i data-lucide="flask-conical" class="w-4 h-4"></i>Run dry-run</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="badge badge-info"><span class="dot"></span>tag: aks_static_pv</span>
+                </div>
+                <div class="font-medium text-[14px] mb-1">Static PV (Azure Disk)</div>
+                <p class="text-[12px] text-fg-mute mb-4">Simulate binding of an existing Azure Managed Disk as PersistentVolume + PVC.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="dryrun_aks_static_pv" data-vault><i data-lucide="flask-conical" class="w-4 h-4"></i>Run dry-run</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="badge badge-info"><span class="dot"></span>tag: pgadmin</span>
+                </div>
+                <div class="font-medium text-[14px] mb-1">pgAdmin 4 (monitoring)</div>
+                <p class="text-[12px] text-fg-mute mb-4">Simulate pgAdmin install with a dedicated PVC (managed-csi, 4Gi) and Traefik Ingress.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="dryrun_pgadmin" data-vault><i data-lucide="flask-conical" class="w-4 h-4"></i>Run dry-run</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="badge badge-info"><span class="dot"></span>tag: grafana</span>
+                </div>
+                <div class="font-medium text-[14px] mb-1">Grafana 11 (monitoring)</div>
+                <p class="text-[12px] text-fg-mute mb-4">Simulate Grafana install with a dedicated PVC (managed-csi, 5Gi) and Traefik Ingress. Shares the <span class="font-mono">monitoring</span> namespace with pgAdmin.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="dryrun_grafana" data-vault><i data-lucide="flask-conical" class="w-4 h-4"></i>Run dry-run</button>
+              </div>
+            </div>
+
+            <div class="mt-6 p-4 border border-rule rounded-md bg-ink-700 max-w-[640px]">
+              <div class="flex gap-3">
+                <i data-lucide="info" class="w-4 h-4 text-info shrink-0 mt-0.5"></i>
+                <div class="text-[12.5px] text-fg-mute">
+                  Dry-run reports changes that <em>would</em> be applied. Use this to validate vars and tags before a real deploy.
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm mt-5" data-open-files="dryrun"><i data-lucide="file-code-2" class="w-3.5 h-3.5"></i>View playbook files</button>
+          </div>
+          <div class="resize-handle" title="Trascina per ridimensionare"></div>
+          <div data-term-slot class="shrink-0 bg-ink-900 sticky top-16 self-start" style="width:480px; height: calc(100vh - 64px);"></div>
+        </div>
+      </section>
+
+      <section data-screen-label="05 Deploy" data-screen="deploy" class="hidden rise">
+        <div class="flex" style="min-height: calc(100vh - 64px);">
+          <div class="flex-1 min-w-0 p-8">
+            <h1 class="text-[26px] font-semibold leading-tight">Deploy</h1>
+            <p class="text-fg-mute mt-1 mb-6 text-[14px]">Apply the Rancher playbook to the live AKS cluster. Changes are real.</p>
+
+            <div class="card p-6 mb-4 max-w-[640px]">
+              <label class="text-[12px] font-medium text-fg-mute">Vault password</label>
+              <div class="relative mt-2">
+                <input type="password" class="field !pr-10 vault-pw" placeholder="Enter vault password" data-pw-for="deploy" />
+                <button class="absolute right-2 top-1/2 -translate-y-1/2 icon-btn !w-7 !h-7" data-toggle-pw><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+              </div>
+              <div class="hairline my-5"></div>
+              <div class="flex items-center gap-3 text-[12px] text-fg-mute">
+                <i data-lucide="shield-alert" class="w-4 h-4 text-warn"></i>
+                This will install / upgrade Rancher on the production cluster.
+              </div>
+            </div>
+
+            <!-- ============== VIA MAESTRA: DEPLOY FULL STACK ============== -->
+            <div class="card card-hover p-6 max-w-[640px] mb-4" style="border-color: rgba(63,184,122,.40); background: linear-gradient(135deg, rgba(63,184,122,.05), transparent 65%)">
+              <div class="flex items-start gap-4">
+                <div class="w-11 h-11 rounded-md flex items-center justify-center shrink-0" style="background:rgba(63,184,122,.10); border:1px solid rgba(63,184,122,.30)">
+                  <i data-lucide="layers" class="w-5 h-5" style="color:#7dd9a4"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <div class="font-semibold text-[15px]">Deploy · Full stack</div>
+                    <span class="badge badge-ok"><span class="dot"></span>via maestra</span>
+                  </div>
+                  <p class="text-[12.5px] text-fg-mute mt-1">Install the full stack in sequence: Traefik &rarr; Rancher CA-Valid &rarr; Static PV (Azure Disk) &rarr; pgAdmin 4. Single vault prompt, single playbook. Excludes Rancher Self-Signed (mutually exclusive with CA-Valid).</p>
+                  <button class="btn btn-primary w-full justify-center mt-4" data-action="deploy_all" data-vault><i data-lucide="rocket" class="w-4 h-4"></i>Deploy Full stack</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 max-w-[640px]">
+              <div class="card card-hover p-5">
+                <div class="font-medium text-[14px] mb-1">Deploy · CA-Valid</div>
+                <p class="text-[12px] text-fg-mute mb-4">Install Rancher with corporate CA-signed certificates.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="deploy_ca_valid" data-vault><i data-lucide="rocket" class="w-4 h-4"></i>Deploy CA-Valid</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="font-medium text-[14px] mb-1">Deploy · Self-Signed</div>
+                <p class="text-[12px] text-fg-mute mb-4">Install Rancher with its bundled self-signed certificate (cert-manager). Runs <span class="font-mono">site-self-signed.yml</span> — separate playbook from the full stack.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="deploy_self" data-vault><i data-lucide="rocket" class="w-4 h-4"></i>Deploy Self-Signed</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="font-medium text-[14px] mb-1">Deploy · Static PV (Azure Disk)</div>
+                <p class="text-[12px] text-fg-mute mb-4">Bind an existing Azure Managed Disk as PersistentVolume + PVC. Reclaim policy: Retain.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="deploy_aks_static_pv" data-vault><i data-lucide="rocket" class="w-4 h-4"></i>Deploy Static PV</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="font-medium text-[14px] mb-1">Deploy · pgAdmin 4</div>
+                <p class="text-[12px] text-fg-mute mb-4">Install pgAdmin in namespace <span class="font-mono">monitoring</span>. Dedicated PVC (managed-csi, 4Gi) and Traefik Ingress.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="deploy_pgadmin" data-vault><i data-lucide="rocket" class="w-4 h-4"></i>Deploy pgAdmin 4</button>
+              </div>
+              <div class="card card-hover p-5">
+                <div class="font-medium text-[14px] mb-1">Deploy · Grafana 11</div>
+                <p class="text-[12px] text-fg-mute mb-4">Install Grafana in namespace <span class="font-mono">monitoring</span>. Dedicated PVC (managed-csi, 5Gi) and Traefik Ingress. Co-tenant of pgAdmin.</p>
+                <button class="btn btn-primary w-full justify-center" data-action="deploy_grafana" data-vault><i data-lucide="rocket" class="w-4 h-4"></i>Deploy Grafana 11</button>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm mt-5" data-open-files="deploy"><i data-lucide="file-code-2" class="w-3.5 h-3.5"></i>View playbook files</button>
+          </div>
+          <div class="resize-handle" title="Trascina per ridimensionare"></div>
+          <div data-term-slot class="shrink-0 bg-ink-900 sticky top-16 self-start" style="width:480px; height: calc(100vh - 64px);"></div>
+        </div>
+      </section>
+
+      <section data-screen-label="06 Uninstall" data-screen="uninstall" class="hidden rise">
+        <div class="flex" style="min-height: calc(100vh - 64px);">
+          <div class="flex-1 min-w-0 p-8">
+            <h1 class="text-[26px] font-semibold leading-tight">Uninstall</h1>
+            <p class="text-fg-mute mt-1 mb-6 text-[14px]">Remove Rancher from the AKS cluster. Destructive action — confirmation required.</p>
+
+            <div class="card p-6 max-w-[640px] border-bad/40" style="border-color: rgba(226,85,85,.35)">
+              <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:rgba(226,85,85,.10); border:1px solid rgba(226,85,85,.30)">
+                  <i data-lucide="alert-triangle" class="w-5 h-5 text-bad"></i>
+                </div>
+                <div class="min-w-0">
+                  <div class="font-medium">This will run <span class="font-mono text-fg">bash uninstall-rancher.sh</span> <button class="text-brand hover:text-brand-hi text-[12px] ml-1 inline-flex items-center gap-1" data-open-files="uninstall"><i data-lucide="file-code-2" class="w-3 h-3"></i>view script</button></div>
+                  <p class="text-[12.5px] text-fg-mute mt-1">All Rancher resources, namespaces and CRDs will be removed. Workloads outside the Rancher namespace are not touched. No vault password required.</p>
+                  <div class="mt-5 flex gap-2">
+                    <button class="btn btn-danger" id="btn-open-uninstall"><i data-lucide="trash-2" class="w-4 h-4"></i>Run uninstall</button>
+                    <a href="#/dashboard" class="btn btn-ghost"><i data-lucide="x" class="w-4 h-4"></i>Cancel</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ============== UNINSTALL pgAdmin ============== -->
+            <div class="card p-6 max-w-[640px] mt-4" style="border-color: rgba(226,85,85,.35)">
+              <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:rgba(226,85,85,.10); border:1px solid rgba(226,85,85,.30)">
+                  <i data-lucide="database" class="w-5 h-5 text-bad"></i>
+                </div>
+                <div class="min-w-0">
+                  <div class="font-medium">This will run <span class="font-mono text-fg">bash uninstall-pgadmin.sh</span></div>
+                  <p class="text-[12.5px] text-fg-mute mt-1">Removes pgAdmin (Deployment, Service, Ingress, Secrets, PVC <span class="font-mono">pvc-pgadmin</span>) from namespace <span class="font-mono">monitoring</span>. The namespace itself is deleted only if empty. The underlying Azure Disk (managed-csi, reclaim Delete) is automatically removed by AKS. No vault password required.</p>
+                  <div class="mt-5 flex gap-2">
+                    <button class="btn btn-danger" id="btn-open-uninstall-pgadmin"><i data-lucide="trash-2" class="w-4 h-4"></i>Run uninstall pgAdmin</button>
+                    <a href="#/dashboard" class="btn btn-ghost"><i data-lucide="x" class="w-4 h-4"></i>Cancel</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ============== UNINSTALL Grafana ============== -->
+            <div class="card p-6 max-w-[640px] mt-4" style="border-color: rgba(226,85,85,.35)">
+              <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:rgba(226,85,85,.10); border:1px solid rgba(226,85,85,.30)">
+                  <i data-lucide="bar-chart-3" class="w-5 h-5 text-bad"></i>
+                </div>
+                <div class="min-w-0">
+                  <div class="font-medium">This will run <span class="font-mono text-fg">bash uninstall-grafana.sh</span></div>
+                  <p class="text-[12.5px] text-fg-mute mt-1">Removes Grafana (Deployment, Service, Ingress, Secrets, PVC <span class="font-mono">pvc-grafana</span>) from namespace <span class="font-mono">monitoring</span>. The namespace is preserved if pgAdmin or other workloads are still present. The underlying Azure Disk (managed-csi, reclaim Delete) is automatically removed by AKS. No vault password required.</p>
+                  <div class="mt-5 flex gap-2">
+                    <button class="btn btn-danger" id="btn-open-uninstall-grafana"><i data-lucide="trash-2" class="w-4 h-4"></i>Run uninstall Grafana</button>
+                    <a href="#/dashboard" class="btn btn-ghost"><i data-lucide="x" class="w-4 h-4"></i>Cancel</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ============== DELETE PERSISTENT VOLUMES ============== -->
+            <div class="card p-6 max-w-[640px] mt-4" style="border-color: rgba(232,168,56,.35)">
+              <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:rgba(232,168,56,.10); border:1px solid rgba(232,168,56,.30)">
+                  <i data-lucide="hard-drive" class="w-5 h-5" style="color:#e8a838"></i>
+                </div>
+                <div class="min-w-0 w-full">
+                  <div class="font-medium">Delete PersistentVolumes</div>
+                  <p class="text-[12.5px] text-fg-mute mt-1">List the PVs currently registered in the cluster and delete the ones you select. <strong>Bound</strong> PVs are still attached to an active PVC: deleting them is risky. The underlying Azure Disk is removed only if the PV's <span class="font-mono">reclaimPolicy</span> is <span class="font-mono">Delete</span>; with <span class="font-mono">Retain</span> the disk remains in Azure and must be removed manually from the portal/CLI.</p>
+                  <div class="mt-4 flex gap-2 flex-wrap">
+                    <button class="btn btn-ghost" id="btn-disks-refresh"><i data-lucide="refresh-cw" class="w-4 h-4"></i>Refresh list</button>
+                    <button class="btn btn-danger" id="btn-disks-delete" disabled><i data-lucide="trash-2" class="w-4 h-4"></i>Delete selected (<span id="disks-selected-count">0</span>)</button>
+                  </div>
+                  <div id="disks-list" class="mt-4 text-[12px] text-fg-mute">Click <em>Refresh list</em> to load the PersistentVolumes.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="resize-handle" title="Trascina per ridimensionare"></div>
+          <div data-term-slot class="shrink-0 bg-ink-900 sticky top-16 self-start" style="width:480px; height: calc(100vh - 64px);"></div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- SSH COMMANDS                                                     -->
+      <!-- ============================================================== -->
+      <section data-screen-label="07 SSH" data-screen="ssh" class="p-8 max-w-[1100px] hidden rise">
+        <h1 class="text-[26px] font-semibold leading-tight">SSH Commands</h1>
+        <p class="text-fg-mute mt-1 mb-6 text-[14px]">Tre flussi di accesso: Rancher (CA Valid / Self-Signed) e Dashboard Ansible. Esegui i comandi nell'ordine indicato.</p>
+
+        <!-- ========== CA VALID ========== -->
+        <div class="card p-6 mb-4">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="font-semibold text-[15px]">Rancher · CA Valid</h2>
+              <p class="text-[12px] text-fg-mute mt-0.5">Accesso diretto via DNS aziendale + Traefik (cert wildcard AlmavivA, lucchetto verde).</p>
+            </div>
+            <span class="text-[10px] uppercase tracking-wider px-2 py-1 rounded" style="background:rgba(110,231,183,0.10); color:#6ee7b7; border:1px solid rgba(110,231,183,0.30)">cert valido</span>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <div class="text-[11px] text-fg-mute mb-1.5"><span class="a-dim">1.</span> Apri il browser su Windows</div>
+              <div class="code"><span class="font-mono break-all">https://rancher.app.iac-svil.almaviva.it/dashboard/home</span><button class="icon-btn !w-7 !h-7" data-copy="https://rancher.app.iac-svil.almaviva.it/dashboard/home"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+          </div>
+
+          <div class="mt-5 p-3.5 rounded-md border" style="background:rgba(110,231,183,0.06); border-color:rgba(110,231,183,0.30)">
+            <div class="flex gap-3">
+              <i data-lucide="check-circle-2" class="w-4 h-4 shrink-0 mt-0.5" style="color:#6ee7b7"></i>
+              <div class="text-[12px]">
+                <div class="font-medium" style="color:#bbf7d0">Accesso diretto · nessun tunnel necessario</div>
+                <p class="text-fg-mute mt-1">Il DNS aziendale risolve <span class="font-mono text-fg">rancher.app.iac-svil.almaviva.it</span> sull'Internal LoadBalancer di Traefik (<span class="font-mono text-fg">10.207.201.138</span>), raggiungibile dalla rete aziendale via VNet/ExpressRoute. NIENTE SSH tunnel, NIENTE <span class="font-mono">kubectl port-forward</span>, NIENTE riga nel file hosts. Se in passato avevi aggiunto <span class="font-mono">127.0.0.1 rancher.app.iac-svil.almaviva.it</span> al file hosts, RIMUOVILA.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== SELF-SIGNED ========== -->
+        <div class="card p-6 mb-4">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="font-semibold text-[15px]">Rancher · Self-Signed</h2>
+              <p class="text-[12px] text-fg-mute mt-0.5">Accesso diretto al servizio Rancher (TLS gestito da dynamiclistener).</p>
+            </div>
+            <span class="text-[10px] uppercase tracking-wider px-2 py-1 rounded" style="background:rgba(245,158,11,0.10); color:#fbbf24; border:1px solid rgba(245,158,11,0.30)">self-signed</span>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <div class="text-[11px] text-fg-mute mb-1.5"><span class="a-dim">1.</span> SSH tunnel · Windows PowerShell (lascia aperto)</div>
+              <div class="code"><span class="font-mono break-all"><span class="a-cyn">ssh</span> -i "C:\Users\D.Pascolini\Desktop\IAC-Azure\ALMDEPIAC01LTAZ_key 1.pem" -L 8443:localhost:8443 azureuser<span class="a-dim">@</span>10.207.201.136</span><button class="icon-btn !w-7 !h-7" data-copy='ssh -i "C:\Users\D.Pascolini\Desktop\IAC-Azure\ALMDEPIAC01LTAZ_key 1.pem" -L 8443:localhost:8443 azureuser@10.207.201.136'><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div>
+              <div class="text-[11px] text-fg-mute mb-1.5"><span class="a-dim">2.</span> kubectl port-forward · dentro la sessione SSH della VM</div>
+              <div class="code"><span class="font-mono break-all"><span class="a-cyn">kubectl</span> port-forward -n cattle-system svc/rancher 8443:443</span><button class="icon-btn !w-7 !h-7" data-copy="kubectl port-forward -n cattle-system svc/rancher 8443:443"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div>
+              <div class="text-[11px] text-fg-mute mb-1.5"><span class="a-dim">3.</span> Browser su Windows</div>
+              <div class="code"><span class="font-mono break-all">https://localhost:8443/login</span><button class="icon-btn !w-7 !h-7" data-copy="https://localhost:8443/login"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+          </div>
+
+          <div class="mt-5 p-3.5 rounded-md border" style="background:rgba(245,158,11,0.06); border-color:rgba(245,158,11,0.30)">
+            <div class="flex gap-3">
+              <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 mt-0.5" style="color:#fbbf24"></i>
+              <div class="text-[12px]">
+                <div class="font-medium" style="color:#fde68a">Avviso certificato</div>
+                <p class="text-fg-mute mt-1">Il browser mostrerà un warning di certificato non valido (atteso in modalità self-signed). Clicca <span class="text-fg">Avanzate → Procedi comunque a localhost</span>.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== DASHBOARD ANSIBLE ========== -->
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="font-semibold text-[15px]">Dashboard Ansible</h2>
+              <p class="text-[12px] text-fg-mute mt-0.5">Avvia e accedi a questa stessa dashboard da Windows.</p>
+            </div>
+            <span class="text-[10px] uppercase tracking-wider px-2 py-1 rounded" style="background:rgba(96,165,250,0.10); color:#60a5fa; border:1px solid rgba(96,165,250,0.30)">controller</span>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <div class="text-[11px] text-fg-mute mb-1.5"><span class="a-dim">1.</span> Avvia il demone sulla VM (se non gia' attivo)</div>
+              <div class="code"><span class="font-mono break-all"><span class="a-cyn">sudo</span> systemctl start aks-dashboard.service</span><button class="icon-btn !w-7 !h-7" data-copy="sudo systemctl start aks-dashboard.service"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div>
+              <div class="text-[11px] text-fg-mute mb-1.5"><span class="a-dim">2.</span> SSH tunnel · Windows PowerShell (lascia aperto)</div>
+              <div class="code"><span class="font-mono break-all"><span class="a-cyn">ssh</span> -i "C:\Users\D.Pascolini\Desktop\IAC-Azure\ALMDEPIAC01LTAZ_key 1.pem" -L 8080:localhost:8080 azureuser<span class="a-dim">@</span>10.207.201.136</span><button class="icon-btn !w-7 !h-7" data-copy='ssh -i "C:\Users\D.Pascolini\Desktop\IAC-Azure\ALMDEPIAC01LTAZ_key 1.pem" -L 8080:localhost:8080 azureuser@10.207.201.136'><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div>
+              <div class="text-[11px] text-fg-mute mb-1.5"><span class="a-dim">3.</span> Browser su Windows</div>
+              <div class="code"><span class="font-mono break-all">http://localhost:8080/#/dashboard</span><button class="icon-btn !w-7 !h-7" data-copy="http://localhost:8080/#/dashboard"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+          </div>
+
+          <div class="mt-5 p-3.5 rounded-md border" style="background:rgba(96,165,250,0.06); border-color:rgba(96,165,250,0.30)">
+            <div class="flex gap-3">
+              <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5" style="color:#60a5fa"></i>
+              <div class="text-[12px]">
+                <div class="font-medium" style="color:#bfdbfe">Demone systemd · aks-dashboard.service</div>
+                <p class="text-fg-mute mt-1">La dashboard parte automaticamente al boot della VM e si riavvia in caso di crash. Per fermarla: <span class="font-mono text-fg">sudo systemctl stop aks-dashboard</span>. Per i log live: <span class="font-mono text-fg">journalctl -u aks-dashboard -f</span>. Setup completo in HOW-TO, sezione 10.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- HOW-TO                                                           -->
+      <!-- ============================================================== -->
+      <section data-screen-label="08 How-To" data-screen="howto" class="p-8 max-w-[960px] hidden rise">
+        <div class="flex items-start justify-between mb-6 gap-4">
+          <div>
+            <h1 class="text-[26px] font-semibold leading-tight">HOW-TO</h1>
+            <p class="text-fg-mute mt-1 text-[14px]">Procedure operative complete: deploy Rancher, accesso da Windows, troubleshooting. Sorgente: <span class="font-mono text-fg">HOW-TO</span> nella root del repo.</p>
+          </div>
+          <button class="btn btn-ghost btn-sm shrink-0" data-open-files="howto"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>View raw</button>
+        </div>
+        <div class="card p-7" id="howto-body">
+          <div class="text-fg-mute text-[13px]">Caricamento HOW-TO…</div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ============== FILE VIEWER MODAL ============== -->
+<div id="file-viewer-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(7,10,15,.88); backdrop-filter:blur(6px)">
+  <div class="card flex flex-col" style="width:min(960px,95vw); max-height:85vh; min-height:400px;">
+    <!-- header -->
+    <div class="px-5 py-3 border-b border-rule flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-2.5">
+        <i data-lucide="file-code-2" class="w-4 h-4 text-brand"></i>
+        <span class="font-medium text-[14px]" id="fv-title">Source files</span>
+        <span class="text-fg-dim text-[12px]" id="fv-subtitle"></span>
+      </div>
+      <button class="icon-btn" id="fv-close" title="Chiudi"><i data-lucide="x" class="w-4 h-4"></i></button>
+    </div>
+    <!-- file tabs -->
+    <div class="px-4 py-2 border-b border-rule flex gap-1.5 flex-wrap shrink-0 bg-ink-900" id="fv-tabs"></div>
+    <!-- content -->
+    <div class="flex-1 overflow-auto min-h-0">
+      <div class="px-4 py-2 border-b border-rule flex items-center justify-between bg-ink-900 shrink-0">
+        <span class="text-[11px] font-mono text-fg-mute" id="fv-filepath"></span>
+        <button class="btn btn-ghost btn-sm" id="fv-copy"><i data-lucide="copy" class="w-3.5 h-3.5"></i>Copy</button>
+      </div>
+      <pre id="fv-content" class="text-[12.5px] leading-relaxed p-5 m-0 font-mono overflow-auto whitespace-pre" style="color:#cdd6df; min-height:200px;"><span class="hl-cmt">Seleziona un file dalla lista sopra</span></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ============== UNINSTALL CONFIRM MODAL ============== -->
+<div id="uninstall-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-back">
+  <div class="card p-6 w-full max-w-md mx-4" style="border:1px solid rgba(226,85,85,0.55)">
+    <div class="flex items-start gap-3 mb-4">
+      <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:rgba(226,85,85,.10); border:1px solid rgba(226,85,85,.30)">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-bad"></i>
+      </div>
+      <div>
+        <h3 class="text-[16px] font-semibold">Confirm Uninstall</h3>
+        <p class="text-[12.5px] text-fg-mute mt-1">This will run <span class="font-mono text-fg">bash uninstall-rancher.sh</span> against the live cluster and remove all Rancher resources, namespaces and CRDs. This action cannot be undone.</p>
+      </div>
+    </div>
+    <label class="text-[12px] text-fg-mute">Type <span class="font-mono text-fg">UNINSTALL</span> to confirm</label>
+    <input id="uninstall-confirm" class="field font-mono mt-2" placeholder="UNINSTALL" autocomplete="off" />
+    <div class="flex justify-end gap-2 mt-5">
+      <button class="btn btn-ghost" id="btn-cancel-uninstall">Cancel</button>
+      <button class="btn btn-danger" id="btn-confirm-uninstall" disabled>Confirm uninstall</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== GENERIC CONFIRM MODAL (pgAdmin / Disks) ============== -->
+<!-- Separato da #uninstall-modal per non interferire col flusso Rancher esistente. -->
+<div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-back">
+  <div class="card p-6 w-full max-w-md mx-4" style="border:1px solid rgba(226,85,85,0.55)">
+    <div class="flex items-start gap-3 mb-4">
+      <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0" style="background:rgba(226,85,85,.10); border:1px solid rgba(226,85,85,.30)">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-bad"></i>
+      </div>
+      <div>
+        <h3 id="confirm-title" class="text-[16px] font-semibold">Confirm</h3>
+        <p id="confirm-body" class="text-[12.5px] text-fg-mute mt-1">…</p>
+      </div>
+    </div>
+    <label class="text-[12px] text-fg-mute">Type <span id="confirm-expected-label" class="font-mono text-fg">CONFIRM</span> to confirm</label>
+    <input id="confirm-input" class="field font-mono mt-2" placeholder="CONFIRM" autocomplete="off" />
+    <div class="flex justify-end gap-2 mt-5">
+      <button class="btn btn-ghost" id="btn-cancel-confirm">Cancel</button>
+      <button class="btn btn-danger" id="btn-confirm-confirm" disabled>Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== SHARED TERMINAL TEMPLATE ============== -->
+<template id="tpl-terminal-panel">
+  <div class="flex flex-col h-full">
+    <div class="px-5 py-3 border-b border-rule flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full" style="background:#e25555"></span>
+          <span class="w-2.5 h-2.5 rounded-full" style="background:#e8a838"></span>
+          <span class="w-2.5 h-2.5 rounded-full" style="background:#3fb87a"></span>
+        </div>
+        <span class="text-[12px] text-fg-mute font-mono ml-2 pane-title">ansible · live</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="badge term-status"><span class="dot"></span><span class="t">idle</span></span>
+        <button class="icon-btn !w-7 !h-7" data-clear-term title="Clear"><i data-lucide="eraser" class="w-3.5 h-3.5"></i></button>
+        <button class="icon-btn !w-7 !h-7" data-copy-term title="Copy"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+      </div>
+    </div>
+    <div class="px-5 py-2 border-b border-rule text-[11px] text-fg-mute font-mono flex items-center justify-between">
+      <span class="term-lines">0 lines</span>
+      <span class="term-action">—</span>
+    </div>
+    <div class="term flex-1 min-h-0 !border-0 !rounded-none !bg-ink-900">
+      <div class="term-body term-out"></div>
+    </div>
+  </div>
+</template>
+
+<script>
+/* ============================================================
+   STATE + HELPERS
+   ============================================================ */
+const API = '';
+const HISTORY_KEY = 'aks-job-history';
+const ACTION_LABEL = {
+  vault_main:             { name:'View vault.yml',          type:'Vault' },
+  vault_cavalid:          { name:'View vault_cavalid.yml',  type:'Vault' },
+  vault_storage:          { name:'View vault_storage.yml',  type:'Vault' },
+  vault_pgadmin:          { name:'View vault_pgadmin.yml',  type:'Vault' },
+  vault_grafana:          { name:'View vault_grafana.yml',  type:'Vault' },
+  dryrun_all:             { name:'Dry-Run Full stack',      type:'Dry-Run' },
+  dryrun_ca_valid:        { name:'Dry-Run CA-Valid',        type:'Dry-Run' },
+  dryrun_self:            { name:'Dry-Run Self-Signed',     type:'Dry-Run' },
+  dryrun_aks_static_pv:   { name:'Dry-Run Static PV',       type:'Dry-Run' },
+  dryrun_pgadmin:         { name:'Dry-Run pgAdmin 4',       type:'Dry-Run' },
+  dryrun_grafana:         { name:'Dry-Run Grafana 11',      type:'Dry-Run' },
+  deploy_all:             { name:'Deploy Full stack',       type:'Deploy' },
+  deploy_ca_valid:        { name:'Deploy CA-Valid',         type:'Deploy' },
+  deploy_self:            { name:'Deploy Self-Signed',      type:'Deploy' },
+  deploy_aks_static_pv:   { name:'Deploy Static PV',        type:'Deploy' },
+  deploy_pgadmin:         { name:'Deploy pgAdmin 4',        type:'Deploy' },
+  deploy_grafana:         { name:'Deploy Grafana 11',       type:'Deploy' },
+  uninstall:              { name:'Uninstall Rancher',       type:'Uninstall' },
+  uninstall_pgadmin:      { name:'Uninstall pgAdmin',       type:'Uninstall' },
+  uninstall_grafana:      { name:'Uninstall Grafana',       type:'Uninstall' },
+  delete_disks:           { name:'Delete PVs',               type:'Uninstall' },
+};
+
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+const state = {
+  lastSeenLines: 0,
+  status: 'idle',
+  currentJobId: null,
+  currentAction: null,
+  jobStartTime: null,
+  lines: [],   // all session lines for activity log
+  jobs: [],
+  termInstances: [], // mounted terminal panels
+};
+let _timerInterval = null;
+
+/* ============================================================
+   ROUTING
+   ============================================================ */
+const ROUTE_TITLES = {
+  dashboard: 'Dashboard',
+  stack:     'Stack',
+  activity:  'Activity Log',
+  vault:     'Vault',
+  dryrun:    'Dry-Run',
+  deploy:    'Deploy',
+  uninstall: 'Uninstall',
+  ssh:       'SSH Commands',
+  howto:     'HOW-TO',
+};
+const ROUTE_PARENT = {
+  dashboard: 'Overview',
+  stack:     'Overview',
+  activity:  'Overview',
+  vault:     'Operations',
+  dryrun:    'Operations',
+  deploy:    'Operations',
+  uninstall: 'Operations',
+  ssh:       'Access',
+  howto:     'Documentation',
+};
+
+function route() {
+  const hash = (location.hash || '#/dashboard').replace('#/', '');
+  const key = ROUTE_TITLES[hash] ? hash : 'dashboard';
+
+  $$('section[data-screen]').forEach(s => {
+    s.classList.toggle('hidden', s.dataset.screen !== key);
+    if (s.dataset.screen === key) {
+      // restart rise anim
+      s.classList.remove('rise'); void s.offsetWidth; s.classList.add('rise');
+    }
+  });
+
+  $$('.nav-item').forEach(a => {
+    if (a.dataset.route === key) a.setAttribute('aria-current','page');
+    else a.removeAttribute('aria-current');
+  });
+
+  // breadcrumb
+  $('#breadcrumb').innerHTML = `
+    <span class="text-fg-mute">${ROUTE_PARENT[key]}</span>
+    <span class="crumb-sep"></span>
+    <span class="text-fg">${ROUTE_TITLES[key]}</span>`;
+
+  // mount terminals when entering an op screen
+  if (['vault','dryrun','deploy','uninstall'].includes(key)) mountSideTerminals(key);
+  if (key === 'dashboard') { renderJobs(); loadClusterHealth(); }
+  if (key === 'stack')     renderStack();
+  if (key === 'activity')  renderActivityScreen();
+  if (key === 'howto')     renderHowTo();
+
+  window.scrollTo({ top: 0 });
+}
+window.addEventListener('hashchange', route);
+
+/* ============================================================
+   ANSI PARSER (subset)
+   ============================================================ */
+const ANSI_FG = { 30:'a-blk',31:'a-red',32:'a-grn',33:'a-ylw',34:'a-blu',35:'a-mag',36:'a-cyn',37:'a-wht',
+                  90:'a-blk',91:'a-red',92:'a-grn',93:'a-ylw',94:'a-blu',95:'a-mag',96:'a-cyn',97:'a-wht' };
+function escapeHTML(s){return s.replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function ansiToHTML(line) {
+  const re = /\x1b\[([\d;]*)m/g;
+  let out = '', last = 0, classes = [];
+  let m;
+  while ((m = re.exec(line)) !== null) {
+    out += wrapText(line.slice(last, m.index), classes);
+    const codes = (m[1] || '0').split(';').map(c=>parseInt(c,10)||0);
+    for (const c of codes) {
+      if (c === 0) { classes = []; }
+      else if (c === 1) { if(!classes.includes('a-bld')) classes.push('a-bld'); }
+      else if (c === 2) { if(!classes.includes('a-dim')) classes.push('a-dim'); }
+      else if (c === 4) { if(!classes.includes('a-und')) classes.push('a-und'); }
+      else if (ANSI_FG[c]) {
+        classes = classes.filter(x => !x.startsWith('a-') || x==='a-bld'||x==='a-dim'||x==='a-und');
+        classes.push(ANSI_FG[c]);
+      }
+    }
+    last = re.lastIndex;
+  }
+  out += wrapText(line.slice(last), classes);
+  return out;
+}
+function wrapText(text, classes) {
+  if (!text) return '';
+  const esc = escapeHTML(text);
+  return classes.length ? `<span class="${classes.join(' ')}">${esc}</span>` : esc;
+}
+
+/* ============================================================
+   TERMINAL PANELS (side-by-side per op screen + activity)
+   ============================================================ */
+function mountSideTerminals(screenKey) {
+  const screen = $(`section[data-screen="${screenKey}"]`);
+  if (!screen) return;
+  const slot = screen.querySelector('[data-term-slot]');
+  if (!slot) return;
+  if (slot.dataset.mounted) return;
+  slot.dataset.mounted = '1';
+
+  const tpl = $('#tpl-terminal-panel');
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  node.style.height = '100%';
+  slot.appendChild(node);
+  lucide.createIcons({ icons: lucide.icons, attrs:{} });
+
+  state.termInstances.push({
+    out: node.querySelector('.term-out'),
+    status: node.querySelector('.term-status'),
+    lines: node.querySelector('.term-lines'),
+    action: node.querySelector('.term-action'),
+    container: node,
+  });
+  // backfill any existing lines
+  refreshAllTerminals();
+  // clear/copy are handled by global event delegation (see ACTION BINDINGS),
+  // so they work for both the templated panels and the static Activity Log.
+}
+
+function renderActivityScreen() {
+  // activity screen terminal isn't templated; it's already in DOM. Just sync content.
+  refreshAllTerminals();
+}
+
+function pushTerminalLines(newLines) {
+  if (!newLines.length) return;
+  state.lines.push(...newLines);
+  const html = newLines.map(l => `<div>${ansiToHTML(l)}</div>`).join('');
+
+  // op terminals
+  state.termInstances.forEach(t => {
+    t.out.insertAdjacentHTML('beforeend', html);
+    t.lines.textContent = `${state.lines.length} lines`;
+    t.out.scrollTop = t.out.scrollHeight;
+  });
+
+  // activity terminal
+  const act = $('#act-term');
+  if (act) {
+    act.insertAdjacentHTML('beforeend', html);
+    $('#act-lines').textContent = `${state.lines.length} lines`;
+    act.scrollTop = act.scrollHeight;
+  }
+}
+
+function refreshAllTerminals() {
+  const html = state.lines.map(l => `<div>${ansiToHTML(l)}</div>`).join('');
+  state.termInstances.forEach(t => {
+    t.out.innerHTML = html;
+    t.lines.textContent = `${state.lines.length} lines`;
+    t.out.scrollTop = t.out.scrollHeight;
+  });
+  const act = $('#act-term');
+  if (act) {
+    act.innerHTML = html;
+    $('#act-lines').textContent = `${state.lines.length} lines`;
+    act.scrollTop = act.scrollHeight;
+  }
+}
+
+function clearTerminals() {
+  state.lines = [];
+  refreshAllTerminals();
+}
+function copyTerminal(btn) {
+  navigator.clipboard.writeText(state.lines.join('\n')).then(()=> flashCopy(btn));
+}
+
+function setRunningStatus(status, action) {
+  state.status = status;
+  if (action) state.currentAction = action;
+  const map = {
+    idle:    ['badge-pend','idle'],
+    running: ['badge-run','running'],
+    success: ['badge-ok','success'],
+    failed:  ['badge-bad','failed'],
+  };
+  const [cls, label] = map[status] || map.idle;
+
+  state.termInstances.forEach(t => {
+    t.status.className = 'badge ' + cls + (status==='running' ? ' pulse' : '');
+    t.status.querySelector('.t').textContent = label;
+  });
+
+  const a = $('#act-status');
+  if (a) {
+    a.className = 'badge ' + cls + (status==='running' ? ' pulse' : '');
+    a.querySelector('.t').textContent = label;
+  }
+
+  // last-op card
+  updateLastOpCard(status, action || state.currentAction);
+
+  // timer management
+  if (status === 'running' && action) {
+    const name = ACTION_LABEL[action]?.name || action;
+    state.termInstances.forEach(t => { t.action.textContent = `${name} · 0s`; });
+    startTimer(action);
+  } else if (status === 'success' || status === 'failed') {
+    stopTimer(state.currentAction);
+  } else if (status === 'idle') {
+    stopTimer(null);
+    state.currentAction = null;
+    state.termInstances.forEach(t => { t.action.textContent = '—'; });
+  }
+}
+
+function updateLastOpCard(status, action) {
+  const colors = { idle:'#6a7280', running:'#e8a838', success:'#3fb87a', failed:'#e25555' };
+  const labels = { idle:'IDLE', running:'RUNNING', success:'SUCCESS', failed:'FAILED' };
+  const ring = $('#last-op-ring');
+  const center = $('#last-op-center');
+  if (ring) {
+    ring.style.setProperty('--ring-color', colors[status]);
+    ring.style.setProperty('--ring-val', status==='idle' ? 100 : 100);
+    center.innerHTML = `<div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">JOB</div>
+      <div class="text-[12.5px] font-bold leading-none" style="color:${colors[status]}">${labels[status]}</div>`;
+  }
+  if (action) {
+    $('#last-op-name').textContent = ACTION_LABEL[action]?.name || action;
+    $('#last-op-time').textContent = status === 'running' ? 'in progress…' : 'just now';
+  }
+}
+
+/* ============================================================
+   JOB HISTORY
+   ============================================================ */
+function loadJobs() {
+  try { state.jobs = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+  catch { state.jobs = []; }
+}
+function saveJobs() { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.jobs)); }
+function nextJobId() {
+  const n = (state.jobs.reduce((m,j)=> Math.max(m, parseInt(j.id.replace(/\D/g,'')||0)), 1000)) + 1;
+  return '#'+ n;
+}
+function fmtRel(ts) {
+  if (!ts) return '—';
+  const d = (Date.now() - ts)/1000;
+  if (d < 60) return `${Math.max(1,Math.floor(d))}s ago`;
+  if (d < 3600) return `${Math.floor(d/60)}m ago`;
+  if (d < 86400) return `${Math.floor(d/3600)}h ago`;
+  return `${Math.floor(d/86400)}d ago`;
+}
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${(s % 60).toString().padStart(2,'0')}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${(m % 60).toString().padStart(2,'0')}m ${(s % 60).toString().padStart(2,'0')}s`;
+}
+function startTimer(action) {
+  state.jobStartTime = Date.now();
+  if (_timerInterval) clearInterval(_timerInterval);
+  const name = ACTION_LABEL[action]?.name || action;
+  _timerInterval = setInterval(() => {
+    const elapsed = fmtElapsed(Date.now() - state.jobStartTime);
+    const label = `${name} · ${elapsed}`;
+    state.termInstances.forEach(t => { t.action.textContent = label; });
+    const opTime = $('#last-op-time');
+    if (opTime && state.status === 'running') opTime.textContent = `running · ${elapsed}`;
+  }, 1000);
+}
+function stopTimer(action) {
+  if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+  if (state.jobStartTime && action) {
+    const elapsed = fmtElapsed(Date.now() - state.jobStartTime);
+    const name = ACTION_LABEL[action]?.name || action;
+    state.termInstances.forEach(t => { t.action.textContent = `${name} · ${elapsed}`; });
+  }
+  state.jobStartTime = null;
+}
+
+function renderJobs() {
+  const tbody = $('#jobs-tbody');
+  if (!tbody) return;
+  // Real session jobs only — no demo seed. Empty history => empty table.
+  const sample = state.jobs;
+  const view = sample.slice().reverse().slice(0, 8);
+
+  // Chart is hidden until the first real job of the session; it reappears
+  // only once there is at least one deploy/dry-run/vault outcome to plot.
+  const chartCard = $('#activity-chart-card');
+  if (chartCard) chartCard.classList.toggle('hidden', sample.length === 0);
+
+  tbody.innerHTML = view.map(j => {
+    const l = ACTION_LABEL[j.action] || { name:j.action, type:'—' };
+    const badge = { running:'badge-run', success:'badge-ok', failed:'badge-bad', pending:'badge-pend' }[j.status] || 'badge-pend';
+    const label = { running:'Running', success:'Successful', failed:'Failed', pending:'Pending' }[j.status] || j.status;
+    const durStr = (j.startedAt && j.finishedAt) ? ` <span class="text-fg-dim">·</span> ${fmtElapsed(j.finishedAt - j.startedAt)}` : '';
+    const finCell = j.status === 'running' ? 'in progress…' : `${fmtRel(j.finishedAt)}${durStr}`;
+    return `<tr>
+      <td class="font-mono text-fg-mute">${j.id}</td>
+      <td><div class="font-medium text-fg">${l.name}</div>
+          <div class="text-[11px] text-fg-dim font-mono">${j.action}</div></td>
+      <td><span class="badge ${badge} ${j.status==='running'?'pulse':''}"><span class="dot"></span>${label}</span></td>
+      <td class="text-fg-mute">${l.type}</td>
+      <td class="text-fg-mute">${finCell}</td>
+      <td><button class="icon-btn !w-7 !h-7" data-remove-job="${j.id}" title="Remove from history"><i data-lucide="x" class="w-4 h-4"></i></button></td>
+    </tr>`;
+  }).join('');
+
+  $('#jobs-empty').classList.toggle('hidden', view.length > 0);
+  lucide.createIcons({ icons: lucide.icons, attrs:{} });
+  drawActivityChart(sample);
+  renderNotifications(sample);
+}
+
+function pushJob(action) {
+  const job = {
+    id: nextJobId(),
+    action,
+    status: 'running',
+    startedAt: Date.now(),
+    finishedAt: null,
+  };
+  state.jobs.push(job);
+  state.currentJobId = job.id;
+  saveJobs();
+  renderJobs();
+  return job;
+}
+function finishCurrentJob(status) {
+  const j = state.jobs.find(x => x.id === state.currentJobId);
+  if (!j) return;
+  j.status = status;
+  j.finishedAt = Date.now();
+  saveJobs();
+  renderJobs();
+}
+
+/* ============================================================
+   CHART
+   ============================================================ */
+let chart;
+// Driven by the two selects above the chart (#chart-range, #chart-type).
+const chartFilters = { range: 'month', type: 'all' };
+
+function drawActivityChart(jobs) {
+  const ctx = $('#activityChart');
+  if (!ctx) return;
+  // Never render into a hidden section: the canvas would have 0 size and the
+  // chart would come up blank. It's redrawn on entering the Dashboard route.
+  if (ctx.offsetParent === null) return;
+
+  // Bucketing descriptor per selected range.
+  const RANGES = {
+    month: { count: 30, unitMs: 86400000, fmt: d => d.toLocaleDateString(undefined, {month:'short', day:'numeric'}) },
+    week:  { count: 7,  unitMs: 86400000, fmt: d => d.toLocaleDateString(undefined, {weekday:'short'}) },
+    day:   { count: 24, unitMs: 3600000,  fmt: d => String(d.getHours()).padStart(2,'0') + ':00' },
+  };
+  const R = RANGES[chartFilters.range] || RANGES.month;
+  const typeF = chartFilters.type;
+
+  const src = (typeF === 'all')
+    ? jobs
+    : jobs.filter(j => (ACTION_LABEL[j.action]?.type) === typeF);
+
+  const buckets = Array.from({length: R.count}, () => ({s:0, f:0}));
+  const now = Date.now();
+  src.forEach(j => {
+    if (!j.finishedAt) return;
+    const offset = Math.floor((now - j.finishedAt) / R.unitMs);
+    if (offset >= 0 && offset < R.count) {
+      if (j.status === 'success') buckets[R.count-1-offset].s++;
+      else if (j.status === 'failed') buckets[R.count-1-offset].f++;
+    }
+  });
+
+  const labels = buckets.map((_, i) => R.fmt(new Date(now - (R.count-1-i)*R.unitMs)));
+
+  const data = {
+    labels,
+    datasets: [
+      { label:'Successful', data: buckets.map(b=>b.s),
+        borderColor:'#3fb87a', backgroundColor:'rgba(63,184,122,0.22)',
+        fill:true, tension:0.35, pointRadius:0, borderWidth:1.5 },
+      { label:'Failed',     data: buckets.map(b=>b.f),
+        borderColor:'#e25555', backgroundColor:'rgba(226,85,85,0.20)',
+        fill:true, tension:0.35, pointRadius:0, borderWidth:1.5 },
+    ]
+  };
+
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type:'line',
+    data,
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{duration:600},
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:true, position:'top', align:'end',
+          labels: { color:'#8b96a3', boxWidth:8, boxHeight:8, font:{family:'Space Grotesk', size:11} } },
+        tooltip: { backgroundColor:'#0a0e14', borderColor:'#2a3441', borderWidth:1,
+          titleColor:'#e6edf3', bodyColor:'#a1a1aa',
+          titleFont:{family:'Space Grotesk', size:12}, bodyFont:{family:'Space Grotesk', size:12} },
+      },
+      scales: {
+        x: { grid:{color:'rgba(255,255,255,0.04)', drawBorder:false},
+             ticks:{color:'#5d6773', font:{family:'JetBrains Mono', size:10}, maxRotation:0, autoSkipPadding:24} },
+        y: { grid:{color:'rgba(255,255,255,0.04)', drawBorder:false}, beginAtZero:true,
+             ticks:{color:'#5d6773', font:{family:'JetBrains Mono', size:10}, precision:0} },
+      }
+    }
+  });
+}
+
+/* ============================================================
+   LIVE CLUSTER HEALTH (home cards + strip) + STACK inventory
+   ============================================================ */
+const STATUS_META = {
+  healthy:  { cls:'badge-ok',   label:'Healthy',       color:'#3fb87a' },
+  degraded: { cls:'badge-run',  label:'Degraded',      color:'#e8a838' },
+  down:     { cls:'badge-bad',  label:'Down',          color:'#e25555' },
+  absent:   { cls:'badge-pend', label:'Not installed', color:'#6a7280' },
+};
+
+async function loadClusterHealth() {
+  try {
+    const r = await fetch(API + '/api/health', { cache:'no-store' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    // kubectl reachable but cluster down (no nodes) => explicit error state,
+    // rather than rendering every component as "not installed".
+    if (data.error && (!data.nodes || data.nodes.total === 0)) { setHealthError(data.error); return; }
+    renderClusterHealth(data);
+  } catch (e) {
+    setHealthError(e.message);
+  }
+}
+
+function setHealthError(msg) {
+  const nt = $('#health-nodes-text'); if (nt) nt.textContent = 'Cluster unreachable';
+  const k = $('#health-k8s'); if (k) k.textContent = msg || 'kubectl error';
+  const ring = $('#health-nodes-ring'); if (ring) ring.style.setProperty('--ring-color', '#e25555');
+  const center = $('#health-nodes-center');
+  if (center) center.innerHTML = '<div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">NODES</div><div class="text-[14px] font-bold leading-none text-bad">ERR</div>';
+  const sum = $('#health-summary'); if (sum) { sum.textContent = msg || 'cluster unreachable'; sum.className = 'text-bad'; }
+  const pills = $('#health-pills'); if (pills) pills.innerHTML = '<span class="text-[12px] text-bad px-2 py-1">Cannot read cluster components</span>';
+  const rt = $('#health-rancher-text'); if (rt) rt.textContent = 'unknown';
+}
+
+function renderClusterHealth(d) {
+  // --- Nodes card ---
+  const nodes = d.nodes || { ready:0, total:0 };
+  const noneTotal = nodes.total === 0;
+  const allReady = nodes.total > 0 && nodes.ready === nodes.total;
+  const ringColor = noneTotal ? '#e25555' : (allReady ? '#3fb87a' : '#e8a838');
+  const ring = $('#health-nodes-ring');
+  if (ring) {
+    ring.style.setProperty('--ring-color', ringColor);
+    ring.style.setProperty('--ring-val', noneTotal ? 100 : Math.round((nodes.ready/nodes.total)*100));
+  }
+  const center = $('#health-nodes-center');
+  if (center) center.innerHTML = `<div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">NODES</div>
+    <div class="text-[15px] font-bold leading-none" style="color:${ringColor}">${nodes.ready}/${nodes.total}</div>`;
+  const nt = $('#health-nodes-text');
+  if (nt) nt.textContent = noneTotal ? 'No nodes reachable'
+        : (allReady ? 'All nodes Ready' : `${nodes.total - nodes.ready} node(s) not Ready`);
+  const k8s = $('#health-k8s');
+  if (k8s) k8s.textContent = d.k8sVersion ? `Kubernetes ${d.k8sVersion}` : 'version unknown';
+
+  // --- Rancher card ---
+  const rc = d.rancher;
+  const rm = STATUS_META[rc ? rc.status : 'absent'] || STATUS_META.absent;
+  const rring = $('#health-rancher-ring'); if (rring) rring.style.setProperty('--ring-color', rm.color);
+  const rcenter = $('#health-rancher-center');
+  if (rcenter) rcenter.innerHTML = `<div class="text-[8px] tracking-[0.16em] text-fg-mute font-semibold mb-0.5">IMAGE</div>
+    <div class="text-[12.5px] font-bold leading-none" style="color:${rm.color}">${rc && rc.version ? _esc(rc.version) : '—'}</div>`;
+  const rtext = $('#health-rancher-text'); if (rtext) rtext.textContent = (rc && rc.installed) ? rm.label : 'Not installed';
+  const rsub = $('#health-rancher-sub');
+  if (rsub) rsub.textContent = (rc && rc.installed) ? `${rc.ready}/${rc.desired} replicas · cattle-system` : 'cattle-system';
+
+  // --- Component strip ---
+  const comp = d.components || { items:[], healthy:0, total:0 };
+  const sum = $('#health-summary');
+  if (sum) {
+    const allOk = comp.total > 0 && comp.healthy === comp.total;
+    sum.textContent = `${comp.healthy}/${comp.total} healthy`;
+    sum.className = allOk ? 'text-ok' : (comp.healthy === 0 ? 'text-bad' : 'text-warn');
+  }
+  const pills = $('#health-pills');
+  if (pills) {
+    pills.innerHTML = (comp.items || []).map(c => {
+      const m = STATUS_META[c.status] || STATUS_META.absent;
+      return `<a href="#/stack" class="badge ${m.cls}" title="${_esc(c.name)}: ${m.label}"><span class="dot"></span>${_esc(c.name)}</a>`;
+    }).join('') || '<span class="text-[12px] text-fg-mute px-2 py-1">No components found</span>';
+  }
+}
+
+async function renderStack() {
+  const tbody = $('#stack-tbody'), summary = $('#stack-summary');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-fg-mute py-10">Loading components…</td></tr>';
+  let data;
+  try {
+    const r = await fetch(API + '/api/stack', { cache:'no-store' });
+    data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+  } catch (e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center text-bad py-10">Error: ${_esc(e.message)}</td></tr>`;
+    if (summary) summary.textContent = 'unreachable';
+    renderStackStorage();
+    return;
+  }
+  const comps = data.components || [];
+  const healthy = comps.filter(c => c.status === 'healthy').length;
+  if (summary) summary.textContent = `${healthy}/${comps.length} healthy`;
+
+  if (tbody) tbody.innerHTML = comps.map(c => {
+    const m = STATUS_META[c.status] || STATUS_META.absent;
+    const ver  = c.version ? `<span class="font-mono text-fg">${_esc(c.version)}</span>` : '<span class="text-fg-dim">—</span>';
+    const reps = c.installed ? `${c.ready}/${c.desired}` : '<span class="text-fg-dim">—</span>';
+    const url  = c.url
+      ? `<a href="${_esc(c.url)}" target="_blank" rel="noopener" class="text-brand hover:text-brand-hi inline-flex items-center gap-1 font-mono text-[11.5px]">open <i data-lucide="external-link" class="w-3 h-3"></i></a>`
+      : '<span class="text-fg-dim">—</span>';
+    return `<tr>
+      <td><div class="font-medium text-fg">${_esc(c.name)}</div><div class="text-[11px] text-fg-dim">${_esc(c.kind)}</div></td>
+      <td><span class="badge ${m.cls}"><span class="dot"></span>${m.label}</span></td>
+      <td>${ver}</td>
+      <td class="font-mono text-[12px] text-fg-mute">${_esc(c.namespace)}</td>
+      <td class="text-center text-fg-mute">${reps}</td>
+      <td>${url}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="text-center text-fg-mute py-10">No components defined.</td></tr>';
+
+  lucide.createIcons({ icons: lucide.icons, attrs:{} });
+  renderStackCert();
+  renderStackStorage();
+}
+
+async function renderStackCert() {
+  const box = $('#stack-cert');
+  if (!box) return;
+  box.innerHTML = '<span class="text-fg-mute">Loading certificate…</span>';
+  try {
+    const r = await fetch(API + '/api/cert', { cache:'no-store' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    if (!d.found) {
+      box.innerHTML = `<div class="text-fg-mute">No TLS certificate in <span class="font-mono text-fg">${_esc(d.namespace||'cattle-system')}/${_esc(d.secret||'tls-rancher-ingress')}</span>${d.error ? ' — ' + _esc(d.error) : ''}. Deploy Rancher (CA-Valid) to populate it.</div>`;
+      return;
+    }
+    const days = d.daysRemaining;
+    let exCls = 'badge-pend', exTxt = 'unknown';
+    if (days != null) {
+      if (days < 0)        { exCls = 'badge-bad'; exTxt = `expired ${-days}d ago`; }
+      else if (days <= 30) { exCls = 'badge-run'; exTxt = `${days}d left`; }
+      else                 { exCls = 'badge-ok';  exTxt = `${days}d left`; }
+    }
+    const fmt = iso => iso ? new Date(iso).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : '—';
+    const issuer = d.issuerO || d.issuerCN || d.issuer || '—';
+    const typeBadge = d.selfSigned
+      ? '<span class="badge badge-run"><span class="dot"></span>self-signed</span>'
+      : '<span class="badge badge-ok"><span class="dot"></span>CA-signed</span>';
+    const sans = (d.sans && d.sans.length)
+      ? d.sans.map(s => `<span class="font-mono text-fg">${_esc(s)}</span>`).join('<span class="text-fg-dim">, </span>')
+      : '<span class="text-fg-dim">—</span>';
+    box.innerHTML = `
+      <div class="flex items-start justify-between gap-4 flex-wrap mb-5">
+        <div class="min-w-0">
+          <div class="text-[11px] text-fg-mute uppercase tracking-wider mb-1">Common Name · FQDN</div>
+          <div class="text-[17px] font-semibold font-mono break-all">${_esc(d.subjectCN || d.fqdn || '—')}</div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">${typeBadge}<span class="badge ${exCls}"><span class="dot"></span>${exTxt}</span></div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-5">
+        <div>
+          <div class="text-[11px] text-fg-mute mb-1">Issued by</div>
+          <div class="text-[13px] text-fg">${_esc(issuer)}</div>
+          ${(d.issuerCN && d.issuerO) ? `<div class="text-[11px] text-fg-dim font-mono mt-0.5">${_esc(d.issuerCN)}</div>` : ''}
+        </div>
+        <div>
+          <div class="text-[11px] text-fg-mute mb-1">Issued on</div>
+          <div class="text-[13px] text-fg">${fmt(d.notBefore)}</div>
+        </div>
+        <div>
+          <div class="text-[11px] text-fg-mute mb-1">Expires on</div>
+          <div class="text-[13px] text-fg">${fmt(d.notAfter)}</div>
+        </div>
+      </div>
+      <div class="mt-5">
+        <div class="text-[11px] text-fg-mute mb-1.5">Subject Alternative Names</div>
+        <div class="text-[12px] leading-relaxed">${sans}</div>
+      </div>`;
+  } catch (e) {
+    box.innerHTML = `<span class="text-bad">Error: ${_esc(e.message)}</span>`;
+  }
+}
+
+async function renderStackStorage() {
+  const box = $('#stack-storage');
+  if (!box) return;
+  box.innerHTML = '<span class="text-fg-mute">Loading volumes…</span>';
+  try {
+    const r = await fetch(API + '/api/disks/list', { cache:'no-store' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    const items = data.items || [];
+    if (!items.length) { box.innerHTML = '<span class="text-fg-mute">No PersistentVolumes.</span>'; return; }
+    box.innerHTML = '<div class="border border-rule rounded-md overflow-hidden">' + items.map(pv => {
+      const [cls, txt] = _phaseBadge(pv.status);
+      const meta = [pv.capacity, pv.reclaimPolicy, pv.storageClass || '(no class)'].filter(Boolean).join(' · ');
+      const bind = pv.boundPVC ? `&rarr; <span class="font-mono">${_esc(pv.boundPVC)}</span>` : '<span class="text-fg-dim">unbound</span>';
+      return `<div class="flex items-start gap-3 p-2.5 border-b border-rule last:border-0">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-mono text-fg text-[12.5px]">${_esc(pv.name)}</span>
+            <span class="badge ${cls}"><span class="dot"></span>${_esc(txt)}</span>
+          </div>
+          <div class="text-[11px] text-fg-mute mt-0.5">${_esc(meta)} &middot; ${bind}</div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+  } catch (e) {
+    box.innerHTML = `<span class="text-bad">Error: ${_esc(e.message)}</span>`;
+  }
+}
+
+/* ============================================================
+   API CALLS (with graceful mock fallback for offline preview)
+   ============================================================ */
+async function callRun(action, vault_password) {
+  try {
+    const r = await fetch(`${API}/api/run`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action, vault_password}),
+    });
+    const j = await r.json();
+    if (!r.ok) {
+      pushTerminalLines([`\x1b[1;31m[ERR] ${j.error || 'HTTP ' + r.status}\x1b[0m`]);
+      setRunningStatus('failed');
+      if (state.currentJobId) { finishCurrentJob('failed'); state.currentJobId = null; }
+    }
+    return j;
+  } catch (e) {
+    pushTerminalLines([`\x1b[1;31m[ERR] Backend non raggiungibile: ${e.message}\x1b[0m`]);
+    setRunningStatus('failed');
+    if (state.currentJobId) { finishCurrentJob('failed'); state.currentJobId = null; }
+    return { error: e.message };
+  }
+}
+
+async function pollOutput() {
+  try {
+    const r = await fetch(`${API}/api/output?since=${state.lastSeenLines}`);
+    const j = await r.json();
+    const newLines = j.lines || [];
+    if (newLines.length) {
+      pushTerminalLines(newLines);
+      state.lastSeenLines = j.total ?? (state.lastSeenLines + newLines.length);
+    }
+    if (j.status && j.status !== state.status) {
+      setRunningStatus(j.status);
+      if (state.currentJobId && (j.status === 'success' || j.status === 'failed')) {
+        finishCurrentJob(j.status);
+        state.currentJobId = null;
+      }
+    }
+  } catch { /* backend not reachable — mock loop keeps running */ }
+}
+setInterval(pollOutput, 700);
+
+/* ---- mock generator so the UI looks alive without a backend ---- */
+let mockTimer = null;
+function mockRun(action) {
+  if (mockTimer) clearTimeout(mockTimer);
+  const seq = mockSequenceFor(action);
+  let i = 0;
+  setRunningStatus('running', action);
+  const tick = () => {
+    if (i >= seq.length) {
+      const ok = !action.startsWith('uninstall') && Math.random() > 0.05;
+      const finalStatus = ok ? 'success' : 'failed';
+      pushTerminalLines([
+        '',
+        ok ? '\x1b[1;32m✓ Playbook completed successfully.\x1b[0m'
+           : '\x1b[1;31m✗ Playbook failed — see output above.\x1b[0m',
+      ]);
+      setRunningStatus(finalStatus);
+      if (state.currentJobId) { finishCurrentJob(finalStatus); state.currentJobId = null; }
+      mockTimer = null;
+      return;
+    }
+    pushTerminalLines([seq[i++]]);
+    mockTimer = setTimeout(tick, 120 + Math.random()*220);
+  };
+  tick();
+}
+function mockSequenceFor(action) {
+  if (action.startsWith('vault_')) {
+    const vaultFile = ({
+      vault_main:    'vault.yml',
+      vault_cavalid: 'vault_cavalid.yml',
+      vault_storage: 'vault_storage.yml',
+      vault_pgadmin: 'vault_pgadmin.yml',
+      vault_grafana: 'vault_grafana.yml',
+    })[action] || 'vault.yml';
+    return [
+      '\x1b[2mDecrypting vault…\x1b[0m',
+      '\x1b[32m+ ansible-vault view group_vars/all/'+ vaultFile +'\x1b[0m',
+      '---',
+      'rancher_admin_password: \x1b[33m"********"\x1b[0m',
+      'azure_tenant_id:       \x1b[33m"5f1a-...-9c"\x1b[0m',
+      'docker_registry_token: \x1b[33m"********"\x1b[0m',
+      'aks_node_pool_subnet:  10.40.12.0/24',
+    ];
+  }
+  if (action === 'uninstall') {
+    return [
+      '\x1b[1;31m+ bash uninstall-rancher.sh\x1b[0m',
+      'deleting helm release \x1b[33mrancher\x1b[0m in namespace \x1b[33mcattle-system\x1b[0m...',
+      '\x1b[32mrelease "rancher" uninstalled\x1b[0m',
+      'cleaning up CRDs (37 found)...',
+      '\x1b[32m  ✓ apps.cattle.io\x1b[0m',
+      '\x1b[32m  ✓ catalog.cattle.io\x1b[0m',
+      '\x1b[32m  ✓ management.cattle.io\x1b[0m',
+      'removing namespace \x1b[33mcattle-system\x1b[0m...',
+      'removing namespace \x1b[33mcattle-fleet-system\x1b[0m...',
+    ];
+  }
+  // Costruisce il comando shell esatto che gira davvero (vedi COMMANDS in app.py).
+  // Senza tag per: deploy_all, dryrun_all (site.yml = full stack); deploy_self,
+  // dryrun_self (site-self-signed.yml e' il file dedicato).
+  const mode = action.startsWith('dryrun') ? '--check --diff ' : '';
+  let cmd;
+  if (action === 'dryrun_all' || action === 'deploy_all') {
+    cmd = `ansible-playbook ${mode}site.yml`;
+  } else if (action === 'dryrun_self' || action === 'deploy_self') {
+    cmd = `ansible-playbook ${mode}site-self-signed.yml`;
+  } else {
+    let tag = 'pgadmin';
+    if (action.includes('ca_valid'))           tag = 'rancher_ca_valid';
+    else if (action.includes('aks_static_pv')) tag = 'aks_static_pv';
+    else if (action.includes('pgadmin'))       tag = 'pgadmin';
+    else if (action.includes('grafana'))       tag = 'grafana';
+    cmd = `ansible-playbook ${mode}--tags ${tag} site.yml`;
+  }
+  return [
+    `\x1b[1;36m+ ${cmd}\x1b[0m`,
+    '',
+    '\x1b[33mPLAY [Install Rancher on AKS] ********************************\x1b[0m',
+    '',
+    '\x1b[36mTASK [Gathering Facts] ***************************************\x1b[0m',
+    '\x1b[32mok: [localhost]\x1b[0m',
+    '',
+    '\x1b[36mTASK [cert-manager : Add jetstack chart repo] ****************\x1b[0m',
+    '\x1b[32mok: [localhost]\x1b[0m',
+    '',
+    '\x1b[36mTASK [cert-manager : Install cert-manager release] ***********\x1b[0m',
+    mode ? '\x1b[33mchanged: [localhost]\x1b[0m   \x1b[2m(dry-run, not applied)\x1b[0m'
+         : '\x1b[33mchanged: [localhost]\x1b[0m',
+    '',
+    '\x1b[36mTASK [rancher : Create cattle-system namespace] **************\x1b[0m',
+    '\x1b[32mok: [localhost]\x1b[0m',
+    '',
+    '\x1b[36mTASK [rancher : Install rancher chart] ***********************\x1b[0m',
+    mode ? '\x1b[33mchanged: [localhost]\x1b[0m   \x1b[2m(dry-run)\x1b[0m'
+         : '\x1b[33mchanged: [localhost]\x1b[0m',
+    '',
+    '\x1b[36mTASK [rancher : Wait for rancher webhook deployment] *********\x1b[0m',
+    '\x1b[32mok: [localhost]\x1b[0m',
+    '',
+    '\x1b[36mTASK [rancher : Apply bootstrap-admin secret] ****************\x1b[0m',
+    '\x1b[32mok: [localhost]\x1b[0m',
+    '',
+    '\x1b[33mPLAY RECAP ***************************************************\x1b[0m',
+    '\x1b[32mlocalhost                  : ok=24  changed=6  unreachable=0  failed=0\x1b[0m',
+  ];
+}
+
+/* ============================================================
+   ACTION BINDINGS
+   ============================================================ */
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action][data-vault]');
+  if (btn) {
+    const action = btn.dataset.action;
+    const pwField = btn.closest('section').querySelector('.vault-pw');
+    const pw = pwField ? pwField.value : '';
+    if (!pw) {
+      pwField.focus();
+      pwField.style.borderColor = '#e25555';
+      setTimeout(()=> pwField.style.borderColor = '', 1500);
+      return;
+    }
+    pushJob(action);
+    state.lastSeenLines = 0;
+    setRunningStatus('running', action);
+    pushTerminalLines([`\x1b[2m$ ${ACTION_LABEL[action].name} — ${new Date().toLocaleTimeString()}\x1b[0m`]);
+    await callRun(action, pw);
+  }
+
+  const tog = e.target.closest('[data-toggle-pw]');
+  if (tog) {
+    const inp = tog.parentElement.querySelector('input');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  }
+
+  // Terminal Clear / Copy — delegated so the static Activity Log buttons
+  // work too (they aren't inside a mounted template panel).
+  const clrTerm = e.target.closest('[data-clear-term]');
+  if (clrTerm) { clearTerminals(); return; }
+  const cpyTerm = e.target.closest('[data-copy-term]');
+  if (cpyTerm) { copyTerminal(cpyTerm); return; }
+
+  const copy = e.target.closest('[data-copy]');
+  if (copy) {
+    navigator.clipboard.writeText(copy.dataset.copy).then(()=> flashCopy(copy));
+  }
+});
+
+function flashCopy(btn) {
+  const ic = btn.querySelector('[data-lucide]');
+  if (!ic) return;
+  const prev = ic.outerHTML;
+  btn.classList.add('copy-flash');
+  ic.outerHTML = '<i data-lucide="check" class="w-3.5 h-3.5"></i>';
+  lucide.createIcons({ icons: lucide.icons, attrs:{} });
+  setTimeout(()=> {
+    btn.classList.remove('copy-flash');
+    // replace any check icon back with copy
+    const cur = btn.querySelector('[data-lucide="check"]');
+    if (cur) { cur.outerHTML = '<i data-lucide="copy" class="w-3.5 h-3.5"></i>'; lucide.createIcons({ icons: lucide.icons, attrs:{} }); }
+  }, 1500);
+}
+
+/* ============================================================
+   UNINSTALL MODAL
+   ============================================================ */
+const modal = $('#uninstall-modal');
+$('#btn-open-uninstall')?.addEventListener('click', () => {
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+  $('#uninstall-confirm').value = '';
+  $('#btn-confirm-uninstall').disabled = true;
+  setTimeout(()=> $('#uninstall-confirm').focus(), 30);
+});
+$('#btn-cancel-uninstall').addEventListener('click', () => {
+  modal.classList.add('hidden'); modal.classList.remove('flex');
+});
+$('#uninstall-confirm').addEventListener('input', (e) => {
+  $('#btn-confirm-uninstall').disabled = e.target.value !== 'UNINSTALL';
+});
+$('#btn-confirm-uninstall').addEventListener('click', async () => {
+  modal.classList.add('hidden'); modal.classList.remove('flex');
+  pushJob('uninstall');
+  state.lastSeenLines = 0;
+  pushTerminalLines([`\x1b[1;31m$ Uninstall Rancher — ${new Date().toLocaleTimeString()}\x1b[0m`]);
+  await callRun('uninstall', '');
+});
+
+/* ============================================================
+   GENERIC CONFIRM MODAL (pgAdmin uninstall + disks delete)
+   ============================================================ */
+const confirmModal = $('#confirm-modal');
+let _confirmCb = null;
+let _confirmExpected = 'CONFIRM';
+
+function openConfirm({ title, bodyHtml, expected='CONFIRM', confirmLabel='Confirm', onConfirm }) {
+  _confirmCb = onConfirm;
+  _confirmExpected = expected;
+  $('#confirm-title').textContent = title;
+  $('#confirm-body').innerHTML = bodyHtml;
+  $('#confirm-expected-label').textContent = expected;
+  $('#confirm-input').placeholder = expected;
+  $('#confirm-input').value = '';
+  $('#btn-confirm-confirm').textContent = confirmLabel;
+  $('#btn-confirm-confirm').disabled = true;
+  confirmModal.classList.remove('hidden'); confirmModal.classList.add('flex');
+  setTimeout(()=> $('#confirm-input').focus(), 30);
+}
+function closeConfirm() {
+  confirmModal.classList.add('hidden'); confirmModal.classList.remove('flex');
+  _confirmCb = null;
+}
+$('#btn-cancel-confirm')?.addEventListener('click', closeConfirm);
+$('#confirm-input')?.addEventListener('input', (e) => {
+  $('#btn-confirm-confirm').disabled = e.target.value !== _confirmExpected;
+});
+$('#btn-confirm-confirm')?.addEventListener('click', () => {
+  const cb = _confirmCb;
+  closeConfirm();
+  if (typeof cb === 'function') cb();
+});
+
+/* ============================================================
+   UNINSTALL pgAdmin
+   ============================================================ */
+$('#btn-open-uninstall-pgadmin')?.addEventListener('click', () => {
+  openConfirm({
+    title: 'Confirm pgAdmin Uninstall',
+    bodyHtml: 'This will run <span class="font-mono text-fg">bash uninstall-pgadmin.sh</span> against the live cluster, removing pgAdmin and PVC <span class="font-mono text-fg">pvc-pgadmin</span> from namespace <span class="font-mono text-fg">monitoring</span>. The Azure Disk (managed-csi) is auto-cleaned. This action cannot be undone.',
+    expected: 'UNINSTALL',
+    confirmLabel: 'Confirm uninstall pgAdmin',
+    onConfirm: async () => {
+      pushJob('uninstall_pgadmin');
+      state.lastSeenLines = 0;
+      pushTerminalLines([`\x1b[1;31m$ Uninstall pgAdmin — ${new Date().toLocaleTimeString()}\x1b[0m`]);
+      await callRun('uninstall_pgadmin', '');
+    },
+  });
+});
+
+/* ============================================================
+   UNINSTALL Grafana
+   ============================================================ */
+$('#btn-open-uninstall-grafana')?.addEventListener('click', () => {
+  openConfirm({
+    title: 'Confirm Grafana Uninstall',
+    bodyHtml: 'This will run <span class="font-mono text-fg">bash uninstall-grafana.sh</span> against the live cluster, removing Grafana and PVC <span class="font-mono text-fg">pvc-grafana</span> from namespace <span class="font-mono text-fg">monitoring</span>. The Azure Disk (managed-csi) is auto-cleaned. The namespace stays if pgAdmin is still there. This action cannot be undone.',
+    expected: 'UNINSTALL',
+    confirmLabel: 'Confirm uninstall Grafana',
+    onConfirm: async () => {
+      pushJob('uninstall_grafana');
+      state.lastSeenLines = 0;
+      pushTerminalLines([`\x1b[1;31m$ Uninstall Grafana — ${new Date().toLocaleTimeString()}\x1b[0m`]);
+      await callRun('uninstall_grafana', '');
+    },
+  });
+});
+
+/* ============================================================
+   DELETE PERSISTENTVOLUMES (list + checkbox + delete)
+   ============================================================ */
+const _disksState = { items: [], selected: new Set() };
+
+function _phaseBadge(status) {
+  const s = (status || '').toLowerCase();
+  if (s === 'bound')     return ['badge-run',  'Bound'];   // giallo = attenzione
+  if (s === 'released')  return ['badge-bad',  'Released'];
+  if (s === 'available') return ['badge-ok',   'Available'];
+  if (s === 'pending')   return ['badge-pend', 'Pending'];
+  return ['badge-pend', status || '?'];
+}
+function _esc(s) {
+  return (s == null ? '' : String(s))
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function _renderDisksList() {
+  const target = $('#disks-list');
+  const items = _disksState.items;
+  if (!items.length) {
+    target.innerHTML = '<div class="text-fg-mute">No PersistentVolumes in the cluster.</div>';
+    $('#btn-disks-delete').disabled = true;
+    $('#disks-selected-count').textContent = '0';
+    return;
+  }
+  const rows = items.map(pv => {
+    const [badgeCls, badgeText] = _phaseBadge(pv.status);
+    const checked = _disksState.selected.has(pv.name) ? 'checked' : '';
+    const meta = [pv.capacity, pv.reclaimPolicy, pv.storageClass || '(no class)']
+      .filter(Boolean).join(' · ');
+    const bind = pv.boundPVC
+      ? `&rarr; <span class="font-mono">${_esc(pv.boundPVC)}</span>`
+      : '<span class="text-fg-dim">unbound</span>';
+    const handle = pv.volumeHandle
+      ? `<div class="text-[10.5px] text-fg-dim mt-1 font-mono truncate" title="${_esc(pv.volumeHandle)}">${_esc(pv.volumeHandle)}</div>`
+      : '';
+    return `
+      <label class="flex items-start gap-3 p-2.5 border-b border-rule cursor-pointer hover:bg-ink-700/40">
+        <input type="checkbox" class="disk-chk mt-1" data-name="${_esc(pv.name)}" ${checked} />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-mono text-fg text-[12.5px]">${_esc(pv.name)}</span>
+            <span class="badge ${badgeCls}"><span class="dot"></span>${_esc(badgeText)}</span>
+          </div>
+          <div class="text-[11px] text-fg-mute mt-0.5">${_esc(meta)} &middot; ${bind}</div>
+          ${handle}
+        </div>
+      </label>
+    `;
+  }).join('');
+  target.innerHTML = `<div class="border border-rule rounded-md overflow-hidden">${rows}</div>`;
+  $$('.disk-chk', target).forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const n = e.target.dataset.name;
+      if (e.target.checked) _disksState.selected.add(n);
+      else _disksState.selected.delete(n);
+      const sz = _disksState.selected.size;
+      $('#disks-selected-count').textContent = String(sz);
+      $('#btn-disks-delete').disabled = sz === 0;
+    });
+  });
+  $('#disks-selected-count').textContent = String(_disksState.selected.size);
+  $('#btn-disks-delete').disabled = _disksState.selected.size === 0;
+}
+
+$('#btn-disks-refresh')?.addEventListener('click', async () => {
+  const target = $('#disks-list');
+  target.innerHTML = '<div class="text-fg-mute">Loading…</div>';
+  try {
+    const r = await fetch(API + '/api/disks/list');
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    _disksState.items = data.items || [];
+    // Mantieni solo le selezioni che esistono ancora nella lista
+    const present = new Set(_disksState.items.map(x => x.name));
+    for (const n of Array.from(_disksState.selected)) {
+      if (!present.has(n)) _disksState.selected.delete(n);
+    }
+    _renderDisksList();
+  } catch (e) {
+    target.innerHTML = `<div class="text-[12px]" style="color:#f08c8c">Error: ${_esc(e.message)}</div>`;
+    $('#btn-disks-delete').disabled = true;
+    $('#disks-selected-count').textContent = '0';
+  }
+});
+
+$('#btn-disks-delete')?.addEventListener('click', () => {
+  const names = Array.from(_disksState.selected);
+  if (!names.length) return;
+  const list = names.map(n => `<span class="font-mono text-fg">${_esc(n)}</span>`).join(', ');
+  openConfirm({
+    title: 'Confirm PV deletion',
+    bodyHtml: `Will run <span class="font-mono text-fg">kubectl delete pv</span> on <strong>${names.length}</strong> PersistentVolume(s): ${list}. The Azure Disk is removed only if reclaim policy is <span class="font-mono text-fg">Delete</span>. This action cannot be undone.`,
+    expected: 'DELETE',
+    confirmLabel: 'Delete selected',
+    onConfirm: async () => {
+      pushJob('delete_disks');
+      state.lastSeenLines = 0;
+      pushTerminalLines([
+        `\x1b[1;31m$ Delete PVs (${names.length}) — ${new Date().toLocaleTimeString()}\x1b[0m`,
+        `\x1b[2m  ${names.join(', ')}\x1b[0m`,
+      ]);
+      try {
+        const r = await fetch(API + '/api/disks/delete', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ names }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        const lines = [];
+        for (const res of (data.results || [])) {
+          const tag = res.ok ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
+          const out = res.output ? '  ' + res.output.replace(/\n/g, '\n  ') : '';
+          lines.push(`${tag} ${res.name}${out ? '\n' + out : ''}`);
+        }
+        pushTerminalLines(lines);
+        setRunningStatus('success', 'delete_disks');
+      } catch (e) {
+        pushTerminalLines([`\x1b[31m✗ ${e.message}\x1b[0m`]);
+        setRunningStatus('failed', 'delete_disks');
+      } finally {
+        _disksState.selected.clear();
+        $('#btn-disks-refresh').click();
+      }
+    },
+  });
+});
+
+/* ============================================================
+   MISC
+   ============================================================ */
+$('#btn-clear-history')?.addEventListener('click', () => {
+  // Wipe the whole session history: table empties AND the chart disappears
+  // (it returns only after the next real deploy/dry-run). Also clears the
+  // notifications derived from those jobs.
+  state.jobs = [];
+  state.notifCleared = Date.now();
+  saveJobs();
+  renderJobs();
+});
+$('#btn-refresh')?.addEventListener('click', () => {
+  // Lucide replaces <i data-lucide> with <svg>, so spin the <svg> (querying
+  // 'i' returned null and threw — that's why refresh did nothing before).
+  const ic = $('#btn-refresh').querySelector('svg, i');
+  if (ic) {
+    ic.style.transition = 'transform 600ms ease-out';
+    ic.style.transform = 'rotate(360deg)';
+    setTimeout(()=> { ic.style.transform = ''; }, 700);
+  }
+  renderJobs();
+  pollOutput();
+  refreshCluster();
+  loadClusterHealth();
+});
+$('#btn-stack-refresh')?.addEventListener('click', () => {
+  const ic = $('#btn-stack-refresh').querySelector('svg, i');
+  if (ic) { ic.style.transition = 'transform 600ms ease-out'; ic.style.transform = 'rotate(360deg)'; setTimeout(()=>{ ic.style.transform=''; }, 700); }
+  renderStack();
+});
+$('#hamburger')?.addEventListener('click', () => {
+  $('#sidebar').classList.toggle('hidden');
+});
+
+/* ---- chart filters (range + job type) ---- */
+$('#chart-range')?.addEventListener('change', (e) => { chartFilters.range = e.target.value; renderJobs(); });
+$('#chart-type')?.addEventListener('change',  (e) => { chartFilters.type  = e.target.value; renderJobs(); });
+
+/* ---- remove a single job from the Recent Jobs list (delegated) ---- */
+document.addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-remove-job]');
+  if (!rm) return;
+  const id = rm.dataset.removeJob;
+  state.jobs = state.jobs.filter(j => j.id !== id);
+  saveJobs();
+  renderJobs();
+});
+
+/* ============================================================
+   TOP-BAR POPOVERS (notifications · about · user)
+   ============================================================ */
+function closeAllPopovers(except) {
+  $$('.popover').forEach(p => { if (p !== except) p.classList.add('hidden'); });
+  $$('[aria-haspopup]').forEach(b => b.setAttribute('aria-expanded','false'));
+}
+function wirePopover(btnId, popId) {
+  const btn = $('#'+btnId), pop = $('#'+popId);
+  if (!btn || !pop) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = pop.classList.contains('hidden');
+    closeAllPopovers(willOpen ? pop : null);
+    pop.classList.toggle('hidden', !willOpen);
+    btn.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen && popId === 'pop-settings') checkBackend();
+  });
+}
+wirePopover('btn-notif',    'pop-notif');
+wirePopover('btn-settings', 'pop-settings');
+wirePopover('btn-user',     'pop-user');
+
+// click outside / links flagged data-pop-close / Esc → close
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-pop-close]')) { closeAllPopovers(null); return; }
+  if (!e.target.closest('.popover') && !e.target.closest('[aria-haspopup]')) closeAllPopovers(null);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllPopovers(null); });
+
+$('#notif-clear')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  state.notifCleared = Date.now();
+  renderNotifications(state.jobs);
+});
+
+function renderNotifications(jobs) {
+  const list = $('#notif-list'), badge = $('#notif-badge');
+  if (!list) return;
+  const cutoff = state.notifCleared || 0;
+  const items = (jobs || [])
+    .filter(j => j.finishedAt && j.finishedAt > cutoff && (j.status === 'success' || j.status === 'failed'))
+    .slice().reverse().slice(0, 8);
+
+  if (!items.length) {
+    list.innerHTML = '<div class="px-4 py-6 text-center text-[12px] text-fg-mute">No notifications</div>';
+  } else {
+    list.innerHTML = items.map(j => {
+      const l = ACTION_LABEL[j.action] || { name:j.action, type:'—' };
+      const ok = j.status === 'success';
+      const ic = ok ? 'check-circle-2' : 'alert-circle';
+      const col = ok ? '#3fb87a' : '#e25555';
+      return `<div class="px-4 py-2.5 border-b border-rule flex items-start gap-2.5">
+        <i data-lucide="${ic}" class="w-4 h-4 shrink-0 mt-0.5" style="color:${col}"></i>
+        <div class="min-w-0 flex-1">
+          <div class="text-[12.5px] text-fg">${l.name} <span class="text-fg-mute">${ok ? 'completed' : 'failed'}</span></div>
+          <div class="text-[11px] text-fg-dim">${l.type} · ${fmtRel(j.finishedAt)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const failed = (jobs || []).filter(j => j.status === 'failed' && j.finishedAt && j.finishedAt > cutoff).length;
+  if (failed > 0) { badge.textContent = String(failed); badge.classList.remove('hidden'); }
+  else badge.classList.add('hidden');
+  lucide.createIcons({ icons: lucide.icons, attrs:{} });
+}
+
+async function checkBackend() {
+  const el = $('#settings-backend'); if (!el) return;
+  el.textContent = 'checking…'; el.style.color = '';
+  try {
+    const r = await fetch(API + '/api/output?since=0', { cache:'no-store' });
+    if (r.ok) { el.textContent = 'connected'; el.style.color = '#3fb87a'; }
+    else { el.textContent = 'error ' + r.status; el.style.color = '#e25555'; }
+  } catch { el.textContent = 'offline'; el.style.color = '#e25555'; }
+}
+
+/* Real cluster identity from `kubectl config current-context` (backend).
+   Replaces the old hardcoded "aks-prod-weu" placeholder and self-updates
+   across clusters. Falls back gracefully when offline. */
+async function refreshCluster() {
+  const chip = $('#cluster-name');
+  const settings = $('#settings-cluster');
+  try {
+    const r = await fetch(API + '/api/cluster', { cache:'no-store' });
+    const j = await r.json();
+    const name = (j && j.context) ? j.context : 'unknown';
+    if (chip) chip.textContent = name;
+    if (settings) settings.textContent = name;
+  } catch {
+    if (chip) chip.textContent = 'offline';
+    if (settings) settings.textContent = 'offline';
+  }
+}
+
+/* ============================================================
+   SYNTAX HIGHLIGHT (YAML / Bash)
+   ============================================================ */
+function syntaxHighlight(code, ext) {
+  const isYaml = ext === 'yml' || ext === 'yaml';
+  const isBash = ext === 'sh' || ext === 'bash';
+  return code.split('\n').map(line => {
+    const e = escapeHTML(line);
+    if (isYaml) return hlYaml(e);
+    if (isBash) return hlBash(e);
+    return e;
+  }).join('\n');
+}
+function hlYaml(e) {
+  if (/^\s*#/.test(e)) return `<span class="hl-cmt">${e}</span>`;
+  if (/\$ANSIBLE_VAULT/.test(e)) return `<span class="hl-enc">${e}</span>`;
+  return e
+    .replace(/^(\s*-?\s*)([\w][\w.\-\/]*)(\s*:)/, (_,sp,k,c) =>
+      `${sp}<span class="hl-key">${k}</span><span style="opacity:.5">${c}</span>`)
+    .replace(/(["'])([^'"]*)\1/g, m => `<span class="hl-str">${m}</span>`)
+    .replace(/\b(true|false|yes|no|null|never|always)\b/g, m => `<span class="hl-num">${m}</span>`);
+}
+function hlBash(e) {
+  if (/^\s*#/.test(e)) return `<span class="hl-cmt">${e}</span>`;
+  return e
+    .replace(/^(\s*)(echo|helm|kubectl|set|if|fi|else|then|for|do|done|bash|source|exit)\b/,
+      (_,sp,kw) => `${sp}<span class="hl-kw">${kw}</span>`)
+    .replace(/(["'])([^'"]*)\1/g, m => `<span class="hl-str">${m}</span>`);
+}
+
+/* ============================================================
+   FILE VIEWER
+   ============================================================ */
+const SCREEN_SOURCE_FILES = {
+  vault: [
+    { path:'group_vars/all/main.yml',          label:'main.yml' },
+    { path:'group_vars/all/vault.yml',         label:'vault.yml' },
+    { path:'group_vars/all/vault_cavalid.yml', label:'vault_cavalid.yml' },
+    { path:'group_vars/all/vault_storage.yml', label:'vault_storage.yml' },
+    { path:'group_vars/all/vault_pgadmin.yml', label:'vault_pgadmin.yml' },
+    { path:'group_vars/all/vault_grafana.yml', label:'vault_grafana.yml' },
+  ],
+  dryrun: [
+    { path:'site.yml',                                                              label:'site.yml' },
+    { path:'site-self-signed.yml',                                                  label:'site-self-signed.yml' },
+    { path:'roles/rancher_install/tasks/00-rancher-install.yml',                    label:'rancher_install.yml' },
+    { path:'roles/rancher_CAValid_install/tasks/00-rancher-CAValid-install.yml',    label:'rancher_CAValid_install.yml' },
+    { path:'roles/traefik_install/tasks/main.yml',                                  label:'traefik_install.yml' },
+    { path:'roles/aks_static_pv_install/tasks/main.yml',                            label:'aks_static_pv_install.yml' },
+    { path:'roles/pgadmin_install/tasks/main.yml',                                  label:'pgadmin_install.yml' },
+    { path:'roles/grafana_install/tasks/main.yml',                                  label:'grafana_install.yml' },
+  ],
+  deploy: [
+    { path:'site.yml',                                                              label:'site.yml' },
+    { path:'site-self-signed.yml',                                                  label:'site-self-signed.yml' },
+    { path:'roles/rancher_install/tasks/00-rancher-install.yml',                    label:'rancher_install.yml' },
+    { path:'roles/rancher_CAValid_install/tasks/00-rancher-CAValid-install.yml',    label:'rancher_CAValid_install.yml' },
+    { path:'roles/traefik_install/tasks/main.yml',                                  label:'traefik_install.yml' },
+    { path:'roles/aks_static_pv_install/tasks/main.yml',                            label:'aks_static_pv_install.yml' },
+    { path:'roles/pgadmin_install/tasks/main.yml',                                  label:'pgadmin_install.yml' },
+    { path:'roles/grafana_install/tasks/main.yml',                                  label:'grafana_install.yml' },
+  ],
+  uninstall: [
+    { path:'uninstall-rancher.sh', label:'uninstall-rancher.sh' },
+  ],
+  howto: [
+    { path:'HOW-TO', label:'HOW-TO' },
+  ],
+};
+const fvCache = {};
+let fvCurrentPath = null;
+
+async function loadFileContent(path) {
+  if (fvCache[path] !== undefined) return fvCache[path];
+  try {
+    const r = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+    const j = await r.json();
+    fvCache[path] = j.error ? `# Errore: ${j.error}` : j.content;
+  } catch(e) {
+    fvCache[path] = `# Backend non raggiungibile: ${e.message}`;
+  }
+  return fvCache[path];
+}
+
+async function openFileViewer(screenKey) {
+  const files = SCREEN_SOURCE_FILES[screenKey] || [];
+  if (!files.length) return;
+  const modal = $('#file-viewer-modal');
+  const titles = { vault:'Vault', dryrun:'Dry-Run', deploy:'Deploy', uninstall:'Uninstall' };
+  $('#fv-title').textContent = `Source · ${titles[screenKey] || screenKey}`;
+  $('#fv-subtitle').textContent = `${files.length} file${files.length > 1 ? 's' : ''}`;
+  $('#fv-tabs').innerHTML = files.map((f,i) =>
+    `<button class="btn btn-ghost btn-sm${i===0?' fv-on':''}" data-fv-file="${f.path}">${f.label}</button>`
+  ).join('');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  lucide.createIcons({ icons:lucide.icons, attrs:{} });
+  await selectFvFile(files[0].path);
+}
+
+async function selectFvFile(path) {
+  fvCurrentPath = path;
+  const content = $('#fv-content');
+  content.innerHTML = '<span class="hl-cmt">Caricamento…</span>';
+  $$('[data-fv-file]').forEach(b => b.classList.toggle('fv-on', b.dataset.fvFile === path));
+  const text = await loadFileContent(path);
+  const ext = path.split('.').pop();
+  content.innerHTML = syntaxHighlight(text, ext);
+  $('#fv-filepath').textContent = path;
+}
+
+document.addEventListener('click', async (e) => {
+  // file viewer tab
+  const tab = e.target.closest('[data-fv-file]');
+  if (tab) { await selectFvFile(tab.dataset.fvFile); return; }
+  // open file viewer
+  const openBtn = e.target.closest('[data-open-files]');
+  if (openBtn) { await openFileViewer(openBtn.dataset.openFiles); return; }
+});
+$('#fv-close')?.addEventListener('click', () => {
+  $('#file-viewer-modal').classList.replace('flex','hidden');
+});
+$('#file-viewer-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.replace('flex','hidden');
+});
+$('#fv-copy')?.addEventListener('click', async () => {
+  if (!fvCurrentPath) return;
+  const text = await loadFileContent(fvCurrentPath);
+  navigator.clipboard.writeText(text).then(() => flashCopy($('#fv-copy')));
+});
+
+/* ============================================================
+   HOW-TO RENDERER
+   ============================================================ */
+async function renderHowTo() {
+  const target = $('#howto-body');
+  if (!target) return;
+  if (target.dataset.loaded) return;
+  target.innerHTML = '<div class="text-fg-mute text-[13px]">Caricamento HOW-TO…</div>';
+  const text = await loadFileContent('HOW-TO');
+  target.innerHTML = parseHowTo(text);
+  target.dataset.loaded = '1';
+  lucide.createIcons({ icons:lucide.icons, attrs:{} });
+}
+
+function parseHowTo(text) {
+  const lines = text.split('\n');
+  const out = [];
+  let i = 0;
+  let para = [], code = [];
+  const esc = escapeHTML;
+
+  const flushPara = () => {
+    if (!para.length) return;
+    out.push(`<p class="text-[13.5px] text-fg leading-[1.7] my-3">${para.join(' ')}</p>`);
+    para = [];
+  };
+  const flushCode = () => {
+    if (!code.length) return;
+    const joined = code.join('\n');
+    out.push(`<div class="my-3 relative group"><pre class="font-mono text-[12.5px] leading-[1.65] px-4 py-3 rounded-md overflow-x-auto whitespace-pre" style="background:#070a0f; border:1px solid #1f2733; color:#cdd6df">${joined}</pre><button class="icon-btn !w-7 !h-7 absolute top-2 right-2 opacity-0 group-hover:opacity-100" data-copy="${esc(code.join('\n')).replace(/"/g,'&quot;')}" title="Copia"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button></div>`);
+    code = [];
+  };
+  const flushAll = () => { flushPara(); flushCode(); };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // blank → flush
+    if (!trimmed) { flushAll(); i++; continue; }
+
+    // -------- separator → next non-empty line is H2 title
+    if (/^-{10,}$/.test(trimmed)) {
+      flushAll();
+      i++;
+      while (i < lines.length && !lines[i].trim()) i++;
+      if (i < lines.length) {
+        out.push(`<h2 class="text-[17px] font-semibold mt-10 mb-4 pb-2.5 border-b border-rule" style="letter-spacing:.005em">${esc(lines[i].trim())}</h2>`);
+        i++;
+        if (i < lines.length && /^-{10,}$/.test(lines[i].trim())) i++;
+      }
+      continue;
+    }
+
+    // === SECTION === or === SECTION
+    if (/^===/.test(trimmed)) {
+      flushAll();
+      const title = trimmed.replace(/^===\s*/, '').replace(/\s*===\s*$/, '');
+      out.push(`<h3 class="text-[14px] font-semibold mt-7 mb-3" style="color:#e8a838">${esc(title)}</h3>`);
+      i++;
+      continue;
+    }
+
+    // STEP N — title
+    if (/^STEP\s+\d+/i.test(trimmed)) {
+      flushAll();
+      const m = trimmed.match(/^(STEP\s+\d+)\s*[—\-:]?\s*(.*)$/i);
+      const step = m ? m[1] : trimmed;
+      const rest = m ? m[2] : '';
+      out.push(`<div class="mt-5 mb-3 flex items-baseline gap-3"><span class="badge badge-info shrink-0"><span class="dot"></span>${esc(step)}</span><span class="text-[13px] font-medium text-fg">${esc(rest)}</span></div>`);
+      i++;
+      continue;
+    }
+
+    // IMPORTANTE callout — collect until blank line
+    if (/^IMPORTANTE/i.test(trimmed)) {
+      flushAll();
+      const head = trimmed;
+      const body = [], codeIn = [];
+      i++;
+      while (i < lines.length && lines[i].trim()) {
+        const l = lines[i];
+        if (/^ {4,}\S/.test(l)) codeIn.push(esc(l.replace(/^ {4}/, '')));
+        else body.push(esc(l.trim()));
+        i++;
+      }
+      let inner = `<div class="font-semibold mb-1" style="color:#f3bb5a">${esc(head)}</div>`;
+      if (body.length) inner += `<div class="text-fg leading-relaxed">${body.join(' ')}</div>`;
+      if (codeIn.length) inner += `<pre class="font-mono text-[12px] mt-2 px-3 py-2 rounded overflow-x-auto whitespace-pre" style="background:rgba(0,0,0,.35); color:#f3bb5a">${codeIn.join('\n')}</pre>`;
+      out.push(`<div class="my-4 p-4 rounded-md flex gap-3" style="background:rgba(232,168,56,.07); border:1px solid rgba(232,168,56,.35)"><i data-lucide="alert-circle" class="w-4 h-4 shrink-0 mt-0.5" style="color:#e8a838"></i><div class="text-[13px] flex-1 min-w-0">${inner}</div></div>`);
+      continue;
+    }
+
+    // Indented (4+ spaces) → code line
+    if (/^ {4,}\S/.test(line)) {
+      flushPara();
+      code.push(esc(line.replace(/^ {4}/, '')));
+      i++;
+      continue;
+    }
+
+    // Short label line ending with ':' or '?'  → small label
+    if (trimmed.length < 70 && /[:?]$/.test(trimmed) && !/^[a-z]/.test(trimmed)) {
+      flushAll();
+      out.push(`<div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-mute mt-4 mb-1.5">${esc(trimmed.replace(/[:?]\s*$/, ''))}</div>`);
+      i++;
+      continue;
+    }
+
+    // Regular paragraph
+    para.push(esc(trimmed));
+    i++;
+  }
+  flushAll();
+  return out.join('\n');
+}
+
+/* ============================================================
+   TERMINAL RESIZE
+   ============================================================ */
+let _resize = null;
+document.addEventListener('mousedown', e => {
+  const h = e.target.closest('.resize-handle');
+  if (!h) return;
+  e.preventDefault();
+  const panel = h.nextElementSibling;
+  _resize = { h, panel, x0: e.clientX, w0: panel.offsetWidth };
+  h.classList.add('dragging');
+  document.body.classList.add('resizing');
+});
+document.addEventListener('mousemove', e => {
+  if (!_resize) return;
+  const delta = _resize.x0 - e.clientX;            // drag left → wider
+  const newW = Math.min(900, Math.max(280, _resize.w0 + delta));
+  _resize.panel.style.width = newW + 'px';
+});
+document.addEventListener('mouseup', () => {
+  if (!_resize) return;
+  _resize.h.classList.remove('dragging');
+  document.body.classList.remove('resizing');
+  _resize = null;
+});
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+loadJobs();
+lucide.createIcons({ icons: lucide.icons, attrs:{} });
+route();
+renderJobs();
+setRunningStatus('idle');
+refreshCluster();
+</script>
+</body>
+</html>
