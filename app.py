@@ -1,95 +1,182 @@
 from flask import Flask, request, jsonify, render_template
-from datetime import datetime, timezone
 import subprocess
 import threading
-import tempfile
-import base64
 import shlex
-import shutil
 import json
-import time
-import re
 import os
 
 app = Flask(__name__)
 
-ANSIBLE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-VENV = os.path.expanduser('~/ansible-env')
+# ---------------------------------------------------------------------------
+# Configurazione di base
+# ---------------------------------------------------------------------------
+# Cartella dove vengono clonati i repository Ansible gestiti dalla dashboard.
+# Personalizzabile via env ANSIBLE_PROJECTS_DIR (default: ~/ansible-projects).
+PROJECTS_DIR = os.path.abspath(
+    os.environ.get('ANSIBLE_PROJECTS_DIR', os.path.expanduser('~/ansible-projects'))
+)
+# Virtualenv con ansible installato. Se l'activate non esiste, i comandi
+# vengono eseguiti comunque usando l'ansible presente nel PATH.
+VENV = os.path.expanduser(os.environ.get('ANSIBLE_VENV', '~/ansible-env'))
 
+# ---------------------------------------------------------------------------
+# Registro dei progetti Ansible.
+# Ogni voce mappa 1:1 un repository GitHub personale. I metadati (playbook,
+# inventory, host groups, roles) sono ricavati dalla struttura reale dei repo.
+# ---------------------------------------------------------------------------
+PROJECTS = [
+    {
+        'key': 'microceph',
+        'name': 'MicroCeph · Dischi Loop',
+        'desc': 'Cluster MicroCeph a 3 nodi con OSD su loop device e CephFS replica 3.',
+        'repo': 'https://github.com/daniele9233/microceph-dischi-loop',
+        'branch': 'main',
+        'subdir': 'ansible',
+        'playbook': 'site.yml',
+        'inventory': 'inventory.ini',
+        'icon': 'hard-drive',
+        'accent': '#5aa6ed',
+        'groups': ['microceph', 'microceph_bootstrap', 'microceph_workers'],
+        'roles': ['microceph_install', 'microceph_bootstrap', 'microceph_join',
+                  'microceph_osd', 'microceph_cephfs', 'microceph_verify'],
+    },
+    {
+        'key': 'kafka',
+        'name': 'Kafka + Zookeeper',
+        'desc': 'Deploy di un cluster Kafka e Zookeeper. NB: il disco /opt va montato manualmente.',
+        'repo': 'https://github.com/daniele9233/kafka-zookeeper-ansible',
+        'branch': 'main',
+        'subdir': '',
+        'playbook': 'install.yml',
+        'inventory': 'inventories/inventory.ini',
+        'icon': 'layers',
+        'accent': '#e8a838',
+        'groups': ['zookeeper', 'kafka'],
+        'roles': ['zookeeper', 'kafka'],
+    },
+    {
+        'key': 'patroni',
+        'name': 'Patroni · PostgreSQL HA',
+        'desc': 'PostgreSQL 15 in alta affidabilità con Patroni, etcd e PgBouncer su 3 nodi.',
+        'repo': 'https://github.com/daniele9233/patroni-cluster',
+        'branch': 'main',
+        'subdir': '',
+        'playbook': 'site.yml',
+        'inventory': 'inventory.ini',
+        'icon': 'database',
+        'accent': '#3fb87a',
+        'groups': ['all'],
+        'roles': ['postgresql_cluster'],
+    },
+    {
+        'key': 'rke2',
+        'name': 'K8s RKE2 + Rancher v5',
+        'desc': 'Cluster RKE2 multi-nodo con Rancher, NFS, pgAdmin, Nginx e Prometheus.',
+        'repo': 'https://github.com/daniele9233/K8s-RKE2-Rancher-v5',
+        'branch': 'main',
+        'subdir': '',
+        'playbook': 'site.yml',
+        'inventory': 'inventory.ini',
+        'icon': 'boxes',
+        'accent': '#c084fc',
+        'groups': ['all', 'masters', 'new_managers', 'workers', 'nfs_server', 'nginx_servers'],
+        'roles': ['create_disk', 'update_hosts_file', 'master1_install', 'master1_config',
+                  'master1_kubectl', 'master1_helm_cert_manager_install', 'master1_create_cluster',
+                  'kubectl_setup', 'nfs', 'nfs_client_setup', 'nfs_provisioner',
+                  'install_pgadmin', 'nginx_install', 'install_prometheus'],
+    },
+]
+PROJECTS_BY_KEY = {p['key']: p for p in PROJECTS}
+
+# Operazioni ansible-playbook supportate -> argomenti aggiuntivi.
+PLAYBOOK_OPS = {
+    'deploy':     [],
+    'dryrun':     ['--check', '--diff'],
+    'syntax':     ['--syntax-check'],
+    'list_tasks': ['--list-tasks'],
+    'list_hosts': ['--list-hosts'],
+}
+# 'ping' è gestita a parte (ansible -m ping, non ansible-playbook).
+VALID_OPS = set(PLAYBOOK_OPS) | {'ping'}
+
+# ---------------------------------------------------------------------------
+# Stato job (uno alla volta, come nella dashboard di riferimento).
+# ---------------------------------------------------------------------------
 _job_lock = threading.Lock()
 _job_state = {
     'status': 'idle',  # idle | running | success | failed
     'output': [],
 }
 
-COMMANDS = {
-    'vault_main':             {'exe': 'ansible-vault',    'args': ['view', 'group_vars/all/vault.yml'],                                          'needs_vault': True},
-    'vault_cavalid':          {'exe': 'ansible-vault',    'args': ['view', 'group_vars/all/vault_cavalid.yml'],                                  'needs_vault': True},
-    'vault_storage':          {'exe': 'ansible-vault',    'args': ['view', 'group_vars/all/vault_storage.yml'],                                  'needs_vault': True},
-    'vault_pgadmin':          {'exe': 'ansible-vault',    'args': ['view', 'group_vars/all/vault_pgadmin.yml'],                                  'needs_vault': True},
-    'vault_grafana':          {'exe': 'ansible-vault',    'args': ['view', 'group_vars/all/vault_grafana.yml'],                                  'needs_vault': True},
-    'dryrun_all':             {'exe': 'ansible-playbook', 'args': ['site.yml',              '--check', '--diff'],                              'needs_vault': True},
-    'dryrun_ca_valid':        {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'rancher_ca_valid', '--check', '--diff'],               'needs_vault': True},
-    'dryrun_self':            {'exe': 'ansible-playbook', 'args': ['site-self-signed.yml',  '--check', '--diff'],                              'needs_vault': True},
-    'dryrun_aks_static_pv':   {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'aks_static_pv',    '--check', '--diff'],               'needs_vault': True},
-    'dryrun_pgadmin':         {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'pgadmin',          '--check', '--diff'],               'needs_vault': True},
-    'dryrun_grafana':         {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'grafana',          '--check', '--diff'],               'needs_vault': True},
-    'deploy_all':             {'exe': 'ansible-playbook', 'args': ['site.yml'],                                                                  'needs_vault': True},
-    'deploy_ca_valid':        {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'rancher_ca_valid'],                                    'needs_vault': True},
-    'deploy_self':            {'exe': 'ansible-playbook', 'args': ['site-self-signed.yml'],                                                      'needs_vault': True},
-    'deploy_aks_static_pv':   {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'aks_static_pv'],                                       'needs_vault': True},
-    'deploy_pgadmin':         {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'pgadmin'],                                             'needs_vault': True},
-    'deploy_grafana':         {'exe': 'ansible-playbook', 'args': ['site.yml', '--tags', 'grafana'],                                             'needs_vault': True},
-    'uninstall':              {'exe': 'bash',             'args': ['uninstall-rancher.sh'],                                                      'needs_vault': False},
-    'uninstall_pgadmin':      {'exe': 'bash',             'args': ['uninstall-pgadmin.sh'],                                                      'needs_vault': False},
-    'uninstall_grafana':      {'exe': 'bash',             'args': ['uninstall-grafana.sh'],                                                      'needs_vault': False},
-}
 
-# Nome PVC valido in Kubernetes: lowercase alfanumerici + '-' e '.'
-# (RFC 1123 subdomain, 253 char max). Usato per validare i nomi PV passati
-# dal client all'endpoint /api/disks/delete.
-_K8S_NAME_RE = re.compile(r'^[a-z0-9]([a-z0-9.\-]{0,251}[a-z0-9])?$')
+# ---------------------------------------------------------------------------
+# Helper sui path dei progetti
+# ---------------------------------------------------------------------------
+def _repo_name(p):
+    """Nome cartella locale del repo (basename dell'URL, senza .git)."""
+    base = p['repo'].rstrip('/').split('/')[-1]
+    return base[:-4] if base.endswith('.git') else base
 
 
-def _run(cmd_info, vault_password):
-    vault_pass_file = None
+def _project_dir(p):
+    """Root del repo clonato."""
+    return os.path.join(PROJECTS_DIR, _repo_name(p))
+
+
+def _work_dir(p):
+    """Directory di lavoro ansible (root + eventuale subdir tipo 'ansible')."""
+    root = _project_dir(p)
+    return os.path.join(root, p['subdir']) if p.get('subdir') else root
+
+
+def _is_cloned(p):
+    return os.path.isdir(os.path.join(_project_dir(p), '.git'))
+
+
+def _safe_join(base, rel):
+    """Join che impedisce path traversal fuori da base. Ritorna None se fuori."""
+    full = os.path.normpath(os.path.join(base, rel))
+    base = os.path.normpath(base)
+    if full != base and not full.startswith(base + os.sep):
+        return None
+    return full
+
+
+# ---------------------------------------------------------------------------
+# Esecuzione comandi in background con streaming su _job_state['output'].
+# ---------------------------------------------------------------------------
+def _run(cmd_parts, cwd, use_venv=True):
     try:
         env = os.environ.copy()
-        env['VIRTUAL_ENV'] = VENV
-        env['PATH'] = f'{VENV}/bin:' + env.get('PATH', '')
-        env.pop('PYTHONHOME', None)
         env['ANSIBLE_FORCE_COLOR'] = '1'
         env['PYTHONUNBUFFERED'] = '1'
 
-        cmd_parts = [cmd_info['exe']] + list(cmd_info['args'])
-
-        if vault_password:
-            tf = tempfile.NamedTemporaryFile(mode='w', suffix='.vaultpass', delete=False)
-            tf.write(vault_password)
-            tf.close()
-            vault_pass_file = tf.name
-            cmd_parts += ['--vault-password-file', vault_pass_file]
-
         quoted = ' '.join(shlex.quote(p) for p in cmd_parts)
-        shell_cmd = (
-            f'source {VENV}/bin/activate'
-            f' && printf "\\033[2m[venv] activated: %s\\n[venv] python:    %s\\033[0m\\n" "$VIRTUAL_ENV" "$(which python)"'
-            f' && exec {quoted}'
-        )
+        activate = os.path.join(VENV, 'bin', 'activate')
+
+        if use_venv and os.path.exists(activate):
+            env['VIRTUAL_ENV'] = VENV
+            env['PATH'] = f'{VENV}/bin:' + env.get('PATH', '')
+            env.pop('PYTHONHOME', None)
+            shell_cmd = (
+                f'source {shlex.quote(activate)}'
+                f' && printf "\\033[2m[venv] %s\\033[0m\\n" "$(command -v ansible-playbook || echo ansible)"'
+                f' && exec {quoted}'
+            )
+        else:
+            shell_cmd = f'exec {quoted}'
 
         proc = subprocess.Popen(
             ['bash', '-c', shell_cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,
-            cwd=ANSIBLE_DIR,
+            cwd=cwd,
             bufsize=1,
             universal_newlines=True,
         )
-
         for line in iter(proc.stdout.readline, ''):
             _job_state['output'].append(line.rstrip('\n'))
-
         proc.wait()
         _job_state['status'] = 'success' if proc.returncode == 0 else 'failed'
 
@@ -98,30 +185,23 @@ def _run(cmd_info, vault_password):
         _job_state['status'] = 'failed'
 
     finally:
-        if vault_pass_file:
-            try:
-                os.unlink(vault_pass_file)
-            except OSError:
-                pass
         _job_lock.release()
 
 
-@app.route('/api/file')
-def api_file():
-    rel = request.args.get('path', '')
-    full = os.path.normpath(os.path.join(ANSIBLE_DIR, rel))
-    ansible_root = os.path.normpath(ANSIBLE_DIR)
-    if full != ansible_root and not full.startswith(ansible_root + os.sep):
-        return jsonify({'error': 'Path non consentito'}), 403
-    try:
-        with open(full, 'r', encoding='utf-8') as f:
-            return jsonify({'content': f.read(), 'path': rel})
-    except FileNotFoundError:
-        return jsonify({'error': 'File non trovato'}), 404
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+def _start_job(cmd_parts, cwd, use_venv=True):
+    """Acquisisce il lock e avvia _run in un thread. Ritorna (ok, errore)."""
+    if not _job_lock.acquire(blocking=False):
+        return False, 'Un job è già in esecuzione. Attendi il completamento.'
+    _job_state['output'] = []
+    _job_state['status'] = 'running'
+    t = threading.Thread(target=_run, args=(cmd_parts, cwd, use_venv), daemon=True)
+    t.start()
+    return True, None
 
 
+# ---------------------------------------------------------------------------
+# Rotte pagina + streaming output
+# ---------------------------------------------------------------------------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -138,454 +218,240 @@ def api_output():
     })
 
 
-@app.route('/api/run', methods=['POST'])
-def api_run():
-    data = request.get_json(force=True) or {}
-    action = data.get('action', '')
-    vault_password = data.get('vault_password', '')
-
-    if action not in COMMANDS:
-        return jsonify({'error': 'Azione non valida'}), 400
-
-    cmd_info = COMMANDS[action]
-    if cmd_info['needs_vault'] and not vault_password:
-        return jsonify({'error': 'Vault password obbligatoria per questa operazione'}), 400
-
-    if not _job_lock.acquire(blocking=False):
-        return jsonify({'error': 'Un job è già in esecuzione. Attendi il completamento.'}), 409
-
-    _job_state['output'] = []
-    _job_state['status'] = 'running'
-
-    t = threading.Thread(
-        target=_run,
-        args=(cmd_info, vault_password if cmd_info['needs_vault'] else None),
-        daemon=True,
-    )
-    t.start()
-
-    return jsonify({'status': 'started'})
-
-
-def _kubectl_env():
-    """Env per chiamate kubectl sincrone (con venv attivo per kubeconfig coerente)."""
-    env = os.environ.copy()
-    env['VIRTUAL_ENV'] = VENV
-    env['PATH'] = f'{VENV}/bin:' + env.get('PATH', '')
-    env.pop('PYTHONHOME', None)
-    return env
-
-
 # ---------------------------------------------------------------------------
-# Inventario componenti dello stack (mappa 1:1 i role di site.yml).
-# namespace/deployment sono i nomi reali creati dai role; 'ingress' (ns, name)
-# serve a ricavare l'URL pubblico dall'Ingress effettivo nel cluster.
+# Stato dei progetti (con info git: clonato? branch? ultimo commit?)
 # ---------------------------------------------------------------------------
-COMPONENTS = [
-    {'key': 'traefik',      'name': 'Traefik',      'kind': 'Ingress Controller',
-     'namespace': 'traefik',       'deployment': 'traefik',        'ingress': None},
-    {'key': 'rancher',      'name': 'Rancher',      'kind': 'Platform',
-     'namespace': 'cattle-system', 'deployment': 'rancher',        'ingress': ('cattle-system', 'rancher')},
-    {'key': 'cert-manager', 'name': 'cert-manager', 'kind': 'TLS',
-     'namespace': 'cert-manager',  'deployment': 'cert-manager',   'ingress': None},
-    {'key': 'pgadmin',      'name': 'pgAdmin 4',    'kind': 'Application',
-     'namespace': 'monitoring',    'deployment': 'pgadmin',        'ingress': ('monitoring', 'pgadmin')},
-    {'key': 'grafana',      'name': 'Grafana 11',   'kind': 'Observability',
-     'namespace': 'monitoring',    'deployment': 'grafana',        'ingress': ('monitoring', 'grafana')},
-]
-
-
-def _kubectl_json(kubectl, env, args, timeout=15):
-    """Esegue 'kubectl <args>' attesi in JSON. Ritorna (data|None, error|None)."""
+def _git(args, cwd, timeout=8):
     try:
-        r = subprocess.run(
-            [kubectl] + args,
-            capture_output=True, text=True, env=env, cwd=ANSIBLE_DIR, timeout=timeout,
-        )
-        if r.returncode != 0:
-            return None, ((r.stderr or r.stdout) or '').strip()[:300]
-        return json.loads(r.stdout or '{}'), None
-    except subprocess.TimeoutExpired:
-        return None, f'kubectl timeout >{timeout}s'
-    except json.JSONDecodeError as exc:
-        return None, f'output non JSON: {exc}'
+        r = subprocess.run(['git'] + args, capture_output=True, text=True,
+                           cwd=cwd, timeout=timeout)
+        return r.returncode, (r.stdout or '').strip(), (r.stderr or '').strip()
     except Exception as exc:
-        return None, str(exc)
+        return -1, '', str(exc)
 
 
-def _image_tag(deploy):
-    """Estrae il tag immagine del primo container (es. grafana/grafana:11.3.0 -> 11.3.0)."""
-    try:
-        containers = (((deploy.get('spec') or {}).get('template') or {})
-                      .get('spec') or {}).get('containers') or []
-        if not containers:
-            return None
-        image = containers[0].get('image', '')
-        # separa il tag dall'eventuale registry:port/repo
-        last = image.rsplit('/', 1)[-1]
-        return last.split(':', 1)[1] if ':' in last else 'latest'
-    except Exception:
-        return None
+def _project_status(p):
+    cloned = _is_cloned(p)
+    info = {
+        'key': p['key'], 'name': p['name'], 'desc': p['desc'], 'repo': p['repo'],
+        'branch': p['branch'], 'icon': p['icon'], 'accent': p['accent'],
+        'playbook': p['playbook'], 'inventory': p['inventory'],
+        'subdir': p.get('subdir', ''), 'groups': p['groups'], 'roles': p['roles'],
+        'cloned': cloned, 'head': None, 'currentBranch': None, 'dirty': False,
+        'workDir': _work_dir(p),
+    }
+    if cloned:
+        pdir = _project_dir(p)
+        _, head, _ = _git(['log', '-1', '--pretty=%h %s'], pdir)
+        info['head'] = head or None
+        _, br, _ = _git(['rev-parse', '--abbrev-ref', 'HEAD'], pdir)
+        info['currentBranch'] = br or None
+        _, st, _ = _git(['status', '--porcelain'], pdir)
+        info['dirty'] = bool(st)
+    return info
 
 
-def _collect_nodes(kubectl, env):
-    """Stato dei nodi del cluster + versione Kubernetes (dal kubelet del primo nodo)."""
-    data, err = _kubectl_json(kubectl, env, ['get', 'nodes', '-o', 'json'])
-    items, ready, version = [], 0, None
-    for n in (data or {}).get('items', []) or []:
-        conds = (n.get('status') or {}).get('conditions', []) or []
-        is_ready = any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in conds)
-        if is_ready:
-            ready += 1
-        ni = (n.get('status') or {}).get('nodeInfo') or {}
-        if not version:
-            version = ni.get('kubeletVersion')
-        items.append({
-            'name': (n.get('metadata') or {}).get('name'),
-            'ready': is_ready,
-            'version': ni.get('kubeletVersion'),
-        })
-    return {'ready': ready, 'total': len(items), 'k8sVersion': version,
-            'items': items, 'error': err}
-
-
-def _collect_components(kubectl, env):
-    """Stato di ogni componente dello stack a partire dai Deployment + Ingress reali."""
-    deploys, derr = _kubectl_json(kubectl, env, ['get', 'deploy', '-A', '-o', 'json'])
-    ingresses, ierr = _kubectl_json(kubectl, env, ['get', 'ingress', '-A', '-o', 'json'])
-
-    dmap = {}
-    for d in (deploys or {}).get('items', []) or []:
-        m = d.get('metadata') or {}
-        dmap[(m.get('namespace'), m.get('name'))] = d
-    imap = {}
-    for ing in (ingresses or {}).get('items', []) or []:
-        m = ing.get('metadata') or {}
-        imap[(m.get('namespace'), m.get('name'))] = ing
-
-    out = []
-    for c in COMPONENTS:
-        comp = {'key': c['key'], 'name': c['name'], 'kind': c['kind'],
-                'namespace': c['namespace'], 'installed': False,
-                'version': None, 'ready': 0, 'desired': 0,
-                'status': 'absent', 'url': None}
-        d = dmap.get((c['namespace'], c['deployment']))
-        if d:
-            spec = d.get('spec') or {}
-            st = d.get('status') or {}
-            desired = spec.get('replicas', 0) or 0
-            ready = st.get('readyReplicas', 0) or 0
-            comp.update({
-                'installed': True,
-                'desired': desired,
-                'ready': ready,
-                'version': _image_tag(d),
-                'status': 'healthy' if (desired > 0 and ready == desired)
-                          else ('degraded' if ready > 0 else 'down'),
-            })
-        if c.get('ingress'):
-            ing = imap.get(c['ingress'])
-            rules = ((ing or {}).get('spec') or {}).get('rules') or []
-            if rules and rules[0].get('host'):
-                comp['url'] = 'https://' + rules[0]['host']
-        out.append(comp)
-    return out, (derr or ierr)
-
-
-@app.route('/api/health')
-def api_health():
-    """Riepilogo salute cluster per la home: nodi, versione K8s, conteggio componenti."""
-    kubectl = shutil.which('kubectl') or 'kubectl'
-    env = _kubectl_env()
-    nodes = _collect_nodes(kubectl, env)
-    comps, cerr = _collect_components(kubectl, env)
-    healthy = sum(1 for c in comps if c['status'] == 'healthy')
+@app.route('/api/projects')
+def api_projects():
     return jsonify({
-        'nodes': {'ready': nodes['ready'], 'total': nodes['total']},
-        'k8sVersion': nodes['k8sVersion'],
-        'rancher': next((c for c in comps if c['key'] == 'rancher'), None),
-        'components': {
-            'healthy': healthy,
-            'total': len(comps),
-            'items': [{'key': c['key'], 'name': c['name'], 'status': c['status']} for c in comps],
-        },
-        'error': nodes.get('error') or cerr,
+        'projects': [_project_status(p) for p in PROJECTS],
+        'projectsDir': PROJECTS_DIR,
     })
 
 
-@app.route('/api/stack')
-def api_stack():
-    """Inventario dettagliato dei componenti dello stack (pagina Stack)."""
-    kubectl = shutil.which('kubectl') or 'kubectl'
-    env = _kubectl_env()
-    comps, err = _collect_components(kubectl, env)
-    return jsonify({'components': comps, 'error': err})
-
-
-# Secret TLS che espone la console Rancher (creato dal role CA-Valid dal vault,
-# o dynamiclistener in self-signed). Solo metadati pubblici del certificato.
-RANCHER_TLS_SECRET = 'tls-rancher-ingress'
-RANCHER_TLS_NS = 'cattle-system'
-
-
-def _parse_dn(dn):
-    """Parsa un Distinguished Name openssl ('CN = x, O = y' o '/CN=x/O=y') in dict."""
-    out = {}
-    for part in re.split(r'[,/]', dn or ''):
-        if '=' in part:
-            k, v = part.split('=', 1)
-            out[k.strip().upper()] = v.strip()
-    return out
-
-
-def _parse_openssl_date(s):
-    """Converte 'Jul 31 23:59:59 2027 GMT' in datetime UTC (None se non parsabile)."""
-    s = ' '.join((s or '').replace('GMT', '').split())
-    try:
-        return datetime.strptime(s, '%b %d %H:%M:%S %Y').replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
-
-
-@app.route('/api/cert')
-def api_cert():
-    """Metadati del certificato TLS che espone la console Rancher: issuer, date di
-    emissione/scadenza, FQDN (CN) e SAN. Legge il Secret tls-rancher-ingress e
-    parsa SOLO il leaf con openssl (nessuna chiave privata viene mai esposta)."""
-    kubectl = shutil.which('kubectl') or 'kubectl'
-    env = _kubectl_env()
-    base = {'found': False, 'secret': RANCHER_TLS_SECRET, 'namespace': RANCHER_TLS_NS, 'error': None}
-
-    code, out = _kubectl(kubectl, env, [
-        'get', 'secret', RANCHER_TLS_SECRET, '-n', RANCHER_TLS_NS,
-        '-o', 'jsonpath={.data.tls\\.crt}',
-    ])
-    if code != 0 or not out.strip():
-        base['error'] = (out.strip()[:200] or f'secret {RANCHER_TLS_SECRET} non trovato')
-        return jsonify(base)
+@app.route('/api/project/clone', methods=['POST'])
+def api_project_clone():
+    data = request.get_json(force=True, silent=True) or {}
+    p = PROJECTS_BY_KEY.get(data.get('key', ''))
+    if not p:
+        return jsonify({'error': 'Progetto non valido'}), 400
 
     try:
-        pem = base64.b64decode(out.strip())
+        os.makedirs(PROJECTS_DIR, exist_ok=True)
     except Exception as exc:
-        base['error'] = f'base64 decode: {exc}'
-        return jsonify(base)
+        return jsonify({'error': f'Impossibile creare {PROJECTS_DIR}: {exc}'}), 500
 
-    openssl = shutil.which('openssl') or 'openssl'
+    pdir = _project_dir(p)
+    if _is_cloned(p):
+        cmd = ['git', '-C', pdir, 'pull', '--ff-only', 'origin', p['branch']]
+        cwd = pdir
+    else:
+        cmd = ['git', 'clone', '--branch', p['branch'], p['repo'], pdir]
+        cwd = PROJECTS_DIR
 
-    def _run_openssl(args):
-        try:
-            r = subprocess.run([openssl, 'x509', '-noout'] + args,
-                               input=pem, capture_output=True, timeout=10)
-            return r.returncode, (r.stdout or b'').decode('utf-8', 'replace'), \
-                   (r.stderr or b'').decode('utf-8', 'replace')
-        except Exception as exc:
-            return -1, '', str(exc)
-
-    # Campi base (sempre supportati). Il leaf e' il primo cert del fullchain.
-    rc, txt, errtxt = _run_openssl(['-issuer', '-subject', '-startdate', '-enddate'])
-    if rc != 0:
-        base['error'] = (errtxt.strip()[:200] or 'openssl x509 fallito')
-        return jsonify(base)
-
-    info = dict(base)
-    info['found'] = True
-    issuer = subject = None
-    not_after_dt = None
-    for line in txt.splitlines():
-        line = line.strip()
-        if line.startswith('issuer='):
-            issuer = line[len('issuer='):].strip()
-        elif line.startswith('subject='):
-            subject = line[len('subject='):].strip()
-        elif line.startswith('notBefore='):
-            dt = _parse_openssl_date(line[len('notBefore='):])
-            info['notBefore'] = dt.isoformat().replace('+00:00', 'Z') if dt else None
-        elif line.startswith('notAfter='):
-            not_after_dt = _parse_openssl_date(line[len('notAfter='):])
-            info['notAfter'] = not_after_dt.isoformat().replace('+00:00', 'Z') if not_after_dt else None
-
-    # SAN (best-effort: -ext richiede openssl >= 1.1.1; se manca non e' fatale).
-    sans = []
-    rc2, txt2, _ = _run_openssl(['-ext', 'subjectAltName'])
-    if rc2 == 0:
-        for line in txt2.splitlines():
-            if 'DNS:' in line:
-                sans = [p.strip()[4:] for p in line.split(',') if p.strip().startswith('DNS:')]
-
-    issuer_dn = _parse_dn(issuer)
-    subject_dn = _parse_dn(subject)
-    info['issuer'] = issuer
-    info['subject'] = subject
-    info['issuerCN'] = issuer_dn.get('CN')
-    info['issuerO'] = issuer_dn.get('O')
-    info['subjectCN'] = subject_dn.get('CN')
-    info['fqdn'] = subject_dn.get('CN')
-    info['sans'] = sans
-    info['selfSigned'] = bool(
-        (issuer and subject and issuer == subject)
-        or 'dynamiclistener' in (issuer or '').lower()
-    )
-    if not_after_dt:
-        info['daysRemaining'] = (not_after_dt - datetime.now(timezone.utc)).days
-    return jsonify(info)
+    ok, err = _start_job(cmd, cwd, use_venv=False)
+    if not ok:
+        return jsonify({'error': err}), 409
+    return jsonify({'status': 'started'})
 
 
-@app.route('/api/cluster')
-def api_cluster():
-    """Nome del cluster corrente = kubectl config current-context.
-    Usato dalla GUI per mostrare il cluster reale su cui si opera, al posto
-    del vecchio placeholder hardcoded. Read-only, veloce."""
-    kubectl = shutil.which('kubectl') or 'kubectl'
+# ---------------------------------------------------------------------------
+# Esecuzione playbook / comandi ansible
+# ---------------------------------------------------------------------------
+def _build_command(p, op, limit):
+    inv = p['inventory']
+    if op == 'ping':
+        return ['ansible', (limit or 'all'), '-i', inv, '-m', 'ping']
+    cmd = ['ansible-playbook', p['playbook'], '-i', inv]
+    if limit:
+        cmd += ['--limit', limit]
+    cmd += PLAYBOOK_OPS[op]
+    return cmd
+
+
+@app.route('/api/run', methods=['POST'])
+def api_run():
+    data = request.get_json(force=True, silent=True) or {}
+    p = PROJECTS_BY_KEY.get(data.get('project', ''))
+    op = data.get('op', '')
+    limit = (data.get('limit') or '').strip()
+
+    if not p:
+        return jsonify({'error': 'Progetto non valido'}), 400
+    if op not in VALID_OPS:
+        return jsonify({'error': 'Operazione non valida'}), 400
+    if limit and limit not in p['groups']:
+        return jsonify({'error': f'Host group non valido: {limit}'}), 400
+    if not _is_cloned(p):
+        return jsonify({'error': "Repo non clonato. Usa 'Clona / Pull' nella pagina Progetti."}), 409
+
+    wd = _work_dir(p)
+    if not os.path.isdir(wd):
+        return jsonify({'error': f'Directory di lavoro mancante: {wd}'}), 409
+
+    cmd = _build_command(p, op, limit)
+    ok, err = _start_job(cmd, wd, use_venv=True)
+    if not ok:
+        return jsonify({'error': err}), 409
+    return jsonify({'status': 'started'})
+
+
+# ---------------------------------------------------------------------------
+# Inventory: parsing dell'inventory.ini del progetto in gruppi -> host
+# ---------------------------------------------------------------------------
+def _parse_inventory(text):
+    groups = []
+    current = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line[0] in '#;':
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            name = line[1:-1].strip()
+            kind = 'hosts'
+            if name.endswith(':vars'):
+                kind = 'vars'
+            elif name.endswith(':children'):
+                kind = 'children'
+            current = {'name': name, 'kind': kind, 'lines': []}
+            groups.append(current)
+            continue
+        if current is None:
+            # host fuori da ogni sezione -> gruppo implicito "ungrouped"
+            current = {'name': 'ungrouped', 'kind': 'hosts', 'lines': []}
+            groups.append(current)
+        current['lines'].append(line)
+    return groups
+
+
+@app.route('/api/inventory')
+def api_inventory():
+    p = PROJECTS_BY_KEY.get(request.args.get('project', ''))
+    if not p:
+        return jsonify({'error': 'Progetto non valido'}), 400
+    if not _is_cloned(p):
+        return jsonify({'error': 'Repo non clonato', 'cloned': False}), 409
+
+    full = _safe_join(_work_dir(p), p['inventory'])
+    if not full:
+        return jsonify({'error': 'Path inventory non consentito'}), 403
     try:
-        result = subprocess.run(
-            [kubectl, 'config', 'current-context'],
-            capture_output=True, text=True, env=_kubectl_env(),
-            cwd=ANSIBLE_DIR, timeout=10,
-        )
-        if result.returncode != 0:
-            return jsonify({'context': None,
-                            'error': (result.stderr or result.stdout).strip()[:200]})
-        return jsonify({'context': result.stdout.strip()})
-    except subprocess.TimeoutExpired:
-        return jsonify({'context': None, 'error': 'kubectl timeout (>10s)'})
-    except Exception as exc:
-        return jsonify({'context': None, 'error': str(exc)})
-
-
-@app.route('/api/disks/list')
-def api_disks_list():
-    """Lista i PersistentVolume del cluster con metadati Azure Disk."""
-    kubectl = shutil.which('kubectl') or 'kubectl'
-    try:
-        result = subprocess.run(
-            [kubectl, 'get', 'pv', '-o', 'json'],
-            capture_output=True, text=True, env=_kubectl_env(),
-            cwd=ANSIBLE_DIR, timeout=15,
-        )
-        if result.returncode != 0:
-            return jsonify({
-                'error': 'kubectl get pv ha fallito',
-                'detail': (result.stderr or result.stdout).strip()[:500],
-            }), 502
-        data = json.loads(result.stdout or '{}')
-    except subprocess.TimeoutExpired:
-        return jsonify({'error': 'kubectl timeout (>15s)'}), 504
-    except json.JSONDecodeError as exc:
-        return jsonify({'error': f'output kubectl non JSON: {exc}'}), 502
+        with open(full, 'r', encoding='utf-8') as f:
+            text = f.read()
+    except FileNotFoundError:
+        return jsonify({'error': f"Inventory non trovato: {p['inventory']}"}), 404
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
-    items = []
-    for pv in data.get('items', []) or []:
-        meta = pv.get('metadata') or {}
-        spec = pv.get('spec') or {}
-        status = pv.get('status') or {}
-        csi = spec.get('csi') or {}
-        claim = spec.get('claimRef') or {}
-        bound_pvc = None
-        if claim.get('name'):
-            bound_pvc = f"{claim.get('namespace') or '-'}/{claim.get('name')}"
-        items.append({
-            'name': meta.get('name'),
-            'capacity': (spec.get('capacity') or {}).get('storage'),
-            'accessModes': spec.get('accessModes') or [],
-            'reclaimPolicy': spec.get('persistentVolumeReclaimPolicy'),
-            'storageClass': spec.get('storageClassName') or '',
-            'status': status.get('phase'),
-            'boundPVC': bound_pvc,
-            'csiDriver': csi.get('driver'),
-            'volumeHandle': csi.get('volumeHandle'),
-        })
-    # Ordine stabile: prima i Released (sicuri da cancellare), poi Available,
-    # poi Bound (rischiosi). All'interno: ordine alfabetico.
-    phase_rank = {'Released': 0, 'Available': 1, 'Bound': 2}
-    items.sort(key=lambda x: (phase_rank.get(x.get('status') or '', 9), x.get('name') or ''))
-    return jsonify({'items': items, 'count': len(items)})
+    return jsonify({
+        'inventory': p['inventory'],
+        'groups': _parse_inventory(text),
+        'raw': text,
+    })
 
 
-def _kubectl(kubectl, env, args, timeout=15):
-    """Esegue 'kubectl <args>' e ritorna (returncode, output_combinato_stripped)."""
+# ---------------------------------------------------------------------------
+# File browser: elenco file rilevanti del progetto + lettura singolo file
+# ---------------------------------------------------------------------------
+def _list_project_files(p):
+    wd = _work_dir(p)
+    out = []
+
+    def add(rel):
+        full = os.path.join(wd, rel)
+        if os.path.isfile(full):
+            out.append({'path': rel, 'label': rel})
+
+    add(p['playbook'])
+    add(p['inventory'])
+    add('ansible.cfg')
+
+    gv = os.path.join(wd, 'group_vars')
+    if os.path.isdir(gv):
+        for fn in sorted(os.listdir(gv)):
+            if fn.endswith(('.yml', '.yaml')):
+                add(os.path.join('group_vars', fn))
+
+    roles = os.path.join(wd, 'roles')
+    if os.path.isdir(roles):
+        for role in sorted(os.listdir(roles)):
+            main = os.path.join('roles', role, 'tasks', 'main.yml')
+            if os.path.isfile(os.path.join(wd, main)):
+                add(main)
+    return out
+
+
+@app.route('/api/files')
+def api_files():
+    p = PROJECTS_BY_KEY.get(request.args.get('project', ''))
+    if not p:
+        return jsonify({'error': 'Progetto non valido'}), 400
+    if not _is_cloned(p):
+        return jsonify({'error': 'Repo non clonato', 'cloned': False}), 409
+
+    rel = request.args.get('path')
+    wd = _work_dir(p)
+
+    if rel is None:
+        return jsonify({'files': _list_project_files(p), 'workDir': wd})
+
+    full = _safe_join(wd, rel)
+    if not full:
+        return jsonify({'error': 'Path non consentito'}), 403
     try:
-        r = subprocess.run(
-            [kubectl] + args,
-            capture_output=True, text=True, env=env, cwd=ANSIBLE_DIR, timeout=timeout,
-        )
-        return r.returncode, ((r.stdout or '') + (r.stderr or '')).strip()
-    except subprocess.TimeoutExpired:
-        return -1, f'(kubectl timeout >{timeout}s)'
+        if os.path.getsize(full) > 1_000_000:
+            return jsonify({'error': 'File troppo grande (>1MB)'}), 413
+        with open(full, 'r', encoding='utf-8') as f:
+            return jsonify({'content': f.read(), 'path': rel})
+    except FileNotFoundError:
+        return jsonify({'error': 'File non trovato'}), 404
     except Exception as exc:
-        return -2, str(exc)
+        return jsonify({'error': str(exc)}), 500
 
 
-def _delete_pv_robust(kubectl, env, name):
-    """Cancella un PV in modo idempotente, forzando la rimozione dei finalizer
-    se il PV resta stuck in Terminating. Casi tipici di stuck su Azure Disk:
-      - kubernetes.io/pv-protection: PVC ancora presente
-      - external-attacher/disk.csi.azure.com: volume ancora attached al nodo
-      - external-provisioner/disk.csi.azure.com: AKS non riesce a deprovisionare
-    Strategia: delete --wait=false -> poll 8s -> patch finalizers null -> poll 10s.
-    """
-    log_lines = []
-
-    def pv_exists():
-        c, o = _kubectl(kubectl, env,
-                        ['get', 'pv', name, '--ignore-not-found',
-                         '-o', 'jsonpath={.metadata.name}'])
-        return c == 0 and o != ''
-
-    # 1) Delete non-bloccante (l'API server accetta la richiesta e ritorna subito).
-    code, out = _kubectl(kubectl, env,
-                         ['delete', 'pv', name, '--ignore-not-found', '--wait=false'])
-    if out:
-        log_lines.append(out)
-    if code != 0 and 'not found' not in out.lower():
-        return {'name': name, 'ok': False, 'output': '\n'.join(log_lines)}
-
-    # 2) Polling: aspetta fino a 8s che il PV sparisca da solo.
-    for _ in range(4):
-        time.sleep(2)
-        if not pv_exists():
-            return {'name': name, 'ok': True,
-                    'output': '\n'.join(log_lines) or 'PV cancellato'}
-
-    # 3) Ancora presente -> rimozione forzata dei finalizer (stesso pattern
-    #    di uninstall-rancher.sh per i namespace stuck in Terminating).
-    log_lines.append('PV stuck in Terminating, forzo rimozione finalizer')
-    code, out = _kubectl(kubectl, env,
-                         ['patch', 'pv', name, '--type=merge',
-                          '-p', '{"metadata":{"finalizers":null}}'])
-    if out:
-        log_lines.append(out)
-
-    # 4) Verifica finale (fino a 10s).
-    for _ in range(5):
-        time.sleep(2)
-        if not pv_exists():
-            return {'name': name, 'ok': True, 'output': '\n'.join(log_lines)}
-
-    log_lines.append('PV ancora presente dopo rimozione finalizer (anomalo: '
-                     'verifica con: kubectl get pv ' + name + ' -o yaml)')
-    return {'name': name, 'ok': False, 'output': '\n'.join(log_lines)}
-
-
-@app.route('/api/disks/delete', methods=['POST'])
-def api_disks_delete():
-    """Cancella i PersistentVolume selezionati (uno alla volta, riporta esito per nome).
-    Usa _delete_pv_robust che gestisce i finalizer stuck (caso comune sui PV CSI
-    Azure quando il PVC esiste ancora o il volume e' attached a un nodo)."""
-    payload = request.get_json(force=True, silent=True) or {}
-    names = payload.get('names')
-    if not isinstance(names, list) or not names:
-        return jsonify({'error': "Campo 'names' deve essere una lista non vuota"}), 400
-
-    invalid = [n for n in names if not (isinstance(n, str) and _K8S_NAME_RE.match(n))]
-    if invalid:
-        return jsonify({'error': f'Nomi PV non validi: {invalid}'}), 400
-
-    kubectl = shutil.which('kubectl') or 'kubectl'
-    env = _kubectl_env()
-    results = [_delete_pv_robust(kubectl, env, name) for name in names]
-    return jsonify({'results': results})
+# ---------------------------------------------------------------------------
+# HOW-TO: documentazione della dashboard (file accanto a app.py)
+# ---------------------------------------------------------------------------
+@app.route('/api/howto')
+def api_howto():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'HOW-TO')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return jsonify({'content': f.read()})
+    except FileNotFoundError:
+        return jsonify({'content': '# HOW-TO non disponibile.'})
+    except Exception as exc:
+        return jsonify({'content': f'# Errore: {exc}'})
 
 
 if __name__ == '__main__':

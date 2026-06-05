@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 ansible-env/
+ansible-projects/
 .env
 .vaultpass
 *.vaultpass

@@ -1,0 +1,113 @@
+Polaris · Ansible Control Plane
+
+Una console web per eseguire i tuoi playbook Ansible. Ogni repository GitHub
+e' un "progetto": lo cloni in locale, ne ispezioni inventory e file, lanci un
+dry-run e infine applichi il playbook agli host reali. L'output del comando e'
+mostrato live nel terminale a destra e nella tab Activity Log.
+
+
+--------------------------------------------------------------------------
+Avvio della dashboard
+--------------------------------------------------------------------------
+
+La dashboard e' un'app Flask che gira sul tuo controller Ansible (la macchina
+da cui esegui i playbook). Per avviarla:
+
+    ./start.sh
+
+Poi apri http://localhost:8080. Da remoto, usa un tunnel SSH:
+
+    ssh -L 8080:localhost:8080 <user>@<controller-ip>
+
+NOTA La dashboard esegue git e ansible-playbook sul controller. Assicurati che
+ansible sia installato (nel PATH o nel virtualenv ~/ansible-env) e che il
+controller abbia accesso SSH agli host degli inventory.
+
+
+--------------------------------------------------------------------------
+STEP 1 — Clona un progetto
+--------------------------------------------------------------------------
+
+Vai su Progetti. Ogni card e' un repository Ansible. Clicca "Clona" per
+scaricarlo in locale (cartella ANSIBLE_PROJECTS_DIR, default ~/ansible-projects).
+Se il repo e' gia' clonato, il bottone diventa "Pull" e aggiorna il codice.
+
+L'output di git clone/pull scorre nella tab Activity Log.
+
+
+--------------------------------------------------------------------------
+STEP 2 — Scegli il progetto attivo
+--------------------------------------------------------------------------
+
+Il selettore "Progetto" in alto a destra imposta il progetto su cui operano le
+pagine Deploy, Dry-Run, Controlli, Inventory e File. Puoi anche cliccare
+"Rendi attivo" su una card della pagina Progetti.
+
+
+--------------------------------------------------------------------------
+STEP 3 — Ispeziona inventory e file
+--------------------------------------------------------------------------
+
+Inventory mostra i gruppi e gli host letti dal file inventory del repo.
+File permette di sfogliare playbook, inventory, group_vars e i task dei roles.
+
+
+--------------------------------------------------------------------------
+STEP 4 — Controlli (non distruttivi)
+--------------------------------------------------------------------------
+
+La pagina Controlli esegue verifiche che non modificano gli host:
+
+    Syntax check   ansible-playbook <pb> --syntax-check
+    Ping           ansible <group|all> -m ping
+    Lista task     ansible-playbook <pb> --list-tasks
+    Lista host     ansible-playbook <pb> --list-hosts
+
+
+--------------------------------------------------------------------------
+STEP 5 — Dry-Run
+--------------------------------------------------------------------------
+
+La pagina Dry-Run esegue il playbook in modalita' check:
+
+    ansible-playbook <playbook> -i <inventory> --check --diff
+
+Mostra i cambiamenti che VERREBBERO applicati, senza toccare gli host. Usa il
+selettore Host group per limitare l'esecuzione a un singolo gruppo (--limit).
+
+ATTENZIONE alcuni task con condizioni dinamiche possono comportarsi in modo
+diverso in check mode rispetto a un'esecuzione reale.
+
+
+--------------------------------------------------------------------------
+STEP 6 — Deploy
+--------------------------------------------------------------------------
+
+La pagina Deploy applica il playbook agli host reali:
+
+    ansible-playbook <playbook> -i <inventory> [--limit <gruppo>]
+
+Le modifiche sono reali. Lancia sempre prima un Dry-Run.
+
+
+--------------------------------------------------------------------------
+Progetti configurati
+--------------------------------------------------------------------------
+
+    microceph   MicroCeph a 3 nodi con OSD su loop device e CephFS (subdir ansible/)
+    kafka       Kafka + Zookeeper (inventory in inventories/)
+    patroni     PostgreSQL 15 HA con Patroni, etcd, PgBouncer
+    rke2        Cluster RKE2 + Rancher v5, NFS, pgAdmin, Nginx, Prometheus
+
+Per aggiungere un nuovo repository basta inserire una voce nella lista PROJECTS
+in app.py (key, repo, playbook, inventory, host groups, roles).
+
+
+--------------------------------------------------------------------------
+Note operative
+--------------------------------------------------------------------------
+
+Un solo job alla volta: clone, dry-run e deploy condividono la stessa coda. Se
+un job e' in esecuzione, attendi che finisca prima di lanciarne un altro.
+
+Lo storico dei job e' salvato nel browser (localStorage), non sul server.

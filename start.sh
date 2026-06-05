@@ -1,19 +1,27 @@
 #!/bin/bash
 set -e
 
-source ~/ansible-env/bin/activate
+# Attiva il virtualenv con ansible (se presente). La dashboard funziona anche
+# senza venv, usando l'ansible nel PATH.
+if [ -f ~/ansible-env/bin/activate ]; then
+  source ~/ansible-env/bin/activate
+fi
 
-pip install flask --quiet
+pip install flask --quiet 2>/dev/null || true
 
 cd "$(dirname "$(realpath "$0")")"
 
+# Cartella dove vengono clonati i repository Ansible gestiti dalla dashboard.
+export ANSIBLE_PROJECTS_DIR="${ANSIBLE_PROJECTS_DIR:-$HOME/ansible-projects}"
+
 echo ""
-echo "  AKS Rancher Dashboard"
+echo "  Polaris · Ansible Control Plane"
 echo "  ─────────────────────────────────────────────"
 echo "  URL locale:     http://localhost:8080"
+echo "  Projects dir:   $ANSIBLE_PROJECTS_DIR"
 echo ""
 echo "  Accesso da Windows (SSH tunnel):"
-echo "  ssh -i \"C:\\Users\\D.Pascolini\\Desktop\\IAC-Azure\\ALMDEPIAC01LTAZ_key 1.pem\" -L 8080:localhost:8080 azureuser@10.207.201.136"
+echo "  ssh -L 8080:localhost:8080 <user>@<controller-ip>"
 echo "  Poi apri: http://localhost:8080/#/dashboard"
 echo "  ─────────────────────────────────────────────"
 echo ""
