@@ -21,15 +21,18 @@ fi
 # Cartella dove vengono clonati i repository Ansible gestiti dalla dashboard.
 export ANSIBLE_PROJECTS_DIR="${ANSIBLE_PROJECTS_DIR:-$HOME/ansible-projects}"
 
+# Porta (override: PORT=9000 ./start.sh)
+export PORT="${PORT:-8090}"
+
 echo ""
 echo "  Polaris · Ansible Control Plane"
 echo "  ─────────────────────────────────────────────"
-echo "  URL locale:     http://localhost:8080"
+echo "  URL locale:     http://localhost:$PORT"
 echo "  Projects dir:   $ANSIBLE_PROJECTS_DIR"
 echo ""
 echo "  Accesso da remoto (SSH tunnel):"
-echo "  ssh -L 8080:localhost:8080 <user>@<controller-ip>"
-echo "  Poi apri: http://localhost:8080/#/dashboard"
+echo "  ssh -L $PORT:localhost:$PORT <user>@<controller-ip>"
+echo "  Poi apri: http://localhost:$PORT/#/dashboard"
 echo "  ─────────────────────────────────────────────"
 echo ""
 
